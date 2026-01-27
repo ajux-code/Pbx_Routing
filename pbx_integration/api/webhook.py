@@ -31,19 +31,14 @@ def receive():
     - msg: JSON string containing the actual event data
     """
     try:
-        # Log raw request immediately for debugging
-        raw_data = frappe.request.data.decode('utf-8') if frappe.request.data else ""
-        frappe.log_error(f"RAW WEBHOOK DATA: {raw_data}", "PBX Webhook Debug")
-
         # Get the raw request data
         if frappe.request.data:
             data = json.loads(frappe.request.data)
         else:
             data = frappe.form_dict
 
-        # Log the incoming webhook for debugging
-        frappe.logger().info(f"PBX Webhook received: {json.dumps(data, indent=2)}")
-        frappe.log_error(f"PARSED WEBHOOK: type={data.get('type')}, keys={list(data.keys())}", "PBX Webhook Debug")
+        # Log the incoming webhook for debugging (to server logs only)
+        frappe.logger().info(f"PBX Webhook received: type={data.get('type')}")
 
         # Yeastar P-Series Cloud format: {type: number, sn: string, msg: "json string"}
         event_type = data.get("type")
