@@ -1,0 +1,2 @@
+# Patches will be listed here as we need them
+# Example: pbx_integration.patches.v1_0.fix_call_log_status

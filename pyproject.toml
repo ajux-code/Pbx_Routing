@@ -1,0 +1,20 @@
+[project]
+name = "pbx_integration"
+authors = [
+    { name = "Your Company", email = "your@email.com"}
+]
+description = "Yeastar PBX integration for ERPNext"
+requires-python = ">=3.9"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # Add any extra Python packages here
+    # "websocket-client>=1.0.0",  # If we need WebSocket support
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "pbx_integration"

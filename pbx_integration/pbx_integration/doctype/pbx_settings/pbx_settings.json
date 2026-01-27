@@ -1,0 +1,110 @@
+{
+ "actions": [],
+ "creation": "2024-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "api_section",
+  "api_host",
+  "client_id",
+  "client_secret",
+  "column_break_1",
+  "enabled",
+  "token_section",
+  "access_token",
+  "refresh_token",
+  "token_expiry"
+ ],
+ "fields": [
+  {
+   "fieldname": "api_section",
+   "fieldtype": "Section Break",
+   "label": "API Configuration"
+  },
+  {
+   "fieldname": "api_host",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "API Host",
+   "reqd": 1,
+   "description": "Yeastar PBX API URL (e.g., https://192.168.1.100:8088)"
+  },
+  {
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "label": "Client ID",
+   "reqd": 1,
+   "description": "OAuth2 Client ID from Yeastar API settings"
+  },
+  {
+   "fieldname": "client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret",
+   "reqd": 1,
+   "description": "OAuth2 Client Secret from Yeastar API settings"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "description": "Enable PBX Integration"
+  },
+  {
+   "fieldname": "token_section",
+   "fieldtype": "Section Break",
+   "label": "Token Management",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "access_token",
+   "fieldtype": "Small Text",
+   "label": "Access Token",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "Current OAuth access token (auto-managed)"
+  },
+  {
+   "fieldname": "refresh_token",
+   "fieldtype": "Small Text",
+   "label": "Refresh Token",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "OAuth refresh token (auto-managed)"
+  },
+  {
+   "fieldname": "token_expiry",
+   "fieldtype": "Datetime",
+   "label": "Token Expiry",
+   "read_only": 1,
+   "description": "When the current access token expires"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2024-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "PBX Integration",
+ "name": "PBX Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

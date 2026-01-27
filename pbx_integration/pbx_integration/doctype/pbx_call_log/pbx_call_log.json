@@ -1,0 +1,231 @@
+{
+ "actions": [],
+ "autoname": "format:CALL-{####}",
+ "creation": "2024-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "call_section",
+  "call_id",
+  "call_type",
+  "status",
+  "column_break_1",
+  "extension",
+  "extension_name",
+  "parties_section",
+  "caller_number",
+  "caller_name",
+  "column_break_2",
+  "called_number",
+  "called_name",
+  "timing_section",
+  "call_start",
+  "call_answer",
+  "column_break_3",
+  "call_end",
+  "duration",
+  "linking_section",
+  "linked_customer",
+  "linked_lead",
+  "linked_contact",
+  "recording_section",
+  "has_recording",
+  "recording_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "call_section",
+   "fieldtype": "Section Break",
+   "label": "Call Information"
+  },
+  {
+   "fieldname": "call_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Call ID",
+   "read_only": 1,
+   "unique": 1,
+   "description": "Unique call identifier from PBX"
+  },
+  {
+   "fieldname": "call_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Call Type",
+   "options": "\nInbound\nOutbound\nInternal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "\nRinging\nAnswered\nMissed\nBusy\nFailed\nVoicemail",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "extension",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Extension",
+   "read_only": 1,
+   "description": "PBX extension number"
+  },
+  {
+   "fieldname": "extension_name",
+   "fieldtype": "Data",
+   "label": "Extension Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "parties_section",
+   "fieldtype": "Section Break",
+   "label": "Call Parties"
+  },
+  {
+   "fieldname": "caller_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Caller Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "caller_name",
+   "fieldtype": "Data",
+   "label": "Caller Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "called_number",
+   "fieldtype": "Data",
+   "label": "Called Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "called_name",
+   "fieldtype": "Data",
+   "label": "Called Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timing_section",
+   "fieldtype": "Section Break",
+   "label": "Timing"
+  },
+  {
+   "fieldname": "call_start",
+   "fieldtype": "Datetime",
+   "label": "Call Start",
+   "read_only": 1
+  },
+  {
+   "fieldname": "call_answer",
+   "fieldtype": "Datetime",
+   "label": "Call Answer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "call_end",
+   "fieldtype": "Datetime",
+   "label": "Call End",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Int",
+   "label": "Duration (seconds)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linking_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Records",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "linked_customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "linked_lead",
+   "fieldtype": "Link",
+   "label": "Lead",
+   "options": "Lead"
+  },
+  {
+   "fieldname": "linked_contact",
+   "fieldtype": "Link",
+   "label": "Contact",
+   "options": "Contact"
+  },
+  {
+   "fieldname": "recording_section",
+   "fieldtype": "Section Break",
+   "label": "Recording",
+   "collapsible": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "has_recording",
+   "fieldtype": "Check",
+   "label": "Has Recording",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recording_url",
+   "fieldtype": "Data",
+   "label": "Recording URL",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2024-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "PBX Integration",
+ "name": "PBX Call Log",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 1
+  }
+ ],
+ "sort_field": "call_start",
+ "sort_order": "DESC",
+ "title_field": "caller_number",
+ "track_changes": 1
+}
