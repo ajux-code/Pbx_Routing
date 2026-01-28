@@ -18,7 +18,8 @@ required_apps = ["frappe", "erpnext"]
 # app_include_css = "/assets/pbx_integration/css/pbx_integration.css"
 app_include_js = [
     "/assets/pbx_integration/js/pbx_click_to_call.js",
-    "/assets/pbx_integration/js/pbx_screen_pop.js"
+    "/assets/pbx_integration/js/pbx_screen_pop.js",
+    "/assets/pbx_integration/js/pbx_telephony.js",
 ]
 
 # include js, css files in header of web template

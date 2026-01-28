@@ -108,51 +108,76 @@ def handle_yeastar_cdr(msg_data):
     - recording: Recording file path if exists
     """
     try:
-        call_log = frappe.new_doc("PBX Call Log")
+        call_id = msg_data.get("call_id")
 
-        # Call identification
-        call_log.call_id = msg_data.get("call_id")
-
-        # Call type mapping
+        # Map Yeastar fields
         call_type_map = {
             "Internal": "Internal",
-            "Inbound": "Inbound",
-            "Outbound": "Outbound"
+            "Inbound": "Incoming",
+            "Outbound": "Outgoing"
         }
-        call_log.call_type = call_type_map.get(msg_data.get("type"), "Internal")
+        call_type = call_type_map.get(msg_data.get("type"), "Incoming")
 
         # Status mapping
         status_map = {
-            "ANSWERED": "Answered",
-            "NO ANSWER": "Missed",
+            "ANSWERED": "Completed",
+            "NO ANSWER": "No Answer",
             "BUSY": "Busy",
             "FAILED": "Failed",
-            "VOICEMAIL": "Voicemail"
+            "VOICEMAIL": "No Answer"
         }
-        call_log.status = status_map.get(msg_data.get("status"), "Missed")
+        status = status_map.get(msg_data.get("status"), "Completed")
 
-        # Caller/Called info
-        call_log.caller_number = msg_data.get("call_from")
-        call_log.called_number = msg_data.get("call_to")
+        caller_number = msg_data.get("call_from")
+        called_number = msg_data.get("call_to")
+        duration = msg_data.get("talk_duration") or msg_data.get("call_duration") or 0
+        recording_url = msg_data.get("recording")
 
-        # For internal calls, use call_to as extension
-        if call_log.call_type == "Internal":
-            call_log.extension = msg_data.get("call_to")
+        # Determine extension
+        if call_type == "Internal":
+            extension = called_number
         else:
-            call_log.extension = msg_data.get("call_to") if call_log.call_type == "Inbound" else msg_data.get("call_from")
+            extension = called_number if call_type == "Incoming" else caller_number
 
-        # Timing
+        # Update ERPNext Call Log if it exists
+        if frappe.db.exists("DocType", "Call Log"):
+            if frappe.db.exists("Call Log", {"id": call_id}):
+                call_log_doc = frappe.get_doc("Call Log", {"id": call_id})
+                call_log_doc.status = status
+                call_log_doc.duration = duration
+                call_log_doc.end_time = now_datetime()
+                if recording_url:
+                    call_log_doc.recording_url = recording_url
+                call_log_doc.save(ignore_permissions=True)
+                frappe.db.commit()
+
+                # Trigger call ended event for CallPopup
+                frappe.publish_realtime(
+                    event=f"call_{call_id}_ended",
+                    message={"id": call_id, "status": status},
+                    after_commit=True
+                )
+
+                frappe.logger().info(f"Updated ERPNext Call Log: {call_log_doc.name}")
+
+        # Also maintain PBX Call Log for compatibility
+        call_log = frappe.new_doc("PBX Call Log")
+        call_log.call_id = call_id
+        call_log.call_type = msg_data.get("type", "Internal")
+        call_log.status = msg_data.get("status", "Answered")
+        call_log.caller_number = caller_number
+        call_log.called_number = called_number
+        call_log.extension = extension
         call_log.call_start = parse_datetime(msg_data.get("time_start"))
-        call_log.duration = msg_data.get("talk_duration") or msg_data.get("call_duration") or 0
+        call_log.duration = duration
 
-        # Recording
-        if msg_data.get("recording"):
+        if recording_url:
             call_log.has_recording = 1
-            call_log.recording_url = msg_data.get("recording")
+            call_log.recording_url = recording_url
 
-        # Check for existing record with same call_id
-        if call_log.call_id:
-            existing = frappe.db.exists("PBX Call Log", {"call_id": call_log.call_id})
+        # Check for existing record
+        if call_id:
+            existing = frappe.db.exists("PBX Call Log", {"call_id": call_id})
             if existing:
                 # Update existing
                 frappe.db.set_value("PBX Call Log", existing, {
@@ -162,14 +187,14 @@ def handle_yeastar_cdr(msg_data):
                     "recording_url": call_log.recording_url
                 })
                 frappe.db.commit()
-                frappe.logger().info(f"Updated call log: {existing}")
+                frappe.logger().info(f"Updated PBX call log: {existing}")
                 return {"status": "ok", "message": "Call log updated", "name": existing}
 
         # Insert new record
         call_log.insert(ignore_permissions=True)
         frappe.db.commit()
 
-        frappe.logger().info(f"Created call log: {call_log.name}")
+        frappe.logger().info(f"Created PBX call log: {call_log.name}")
         return {"status": "ok", "message": "Call log created", "name": call_log.name}
 
     except Exception as e:
@@ -423,8 +448,8 @@ def trigger_screen_pop(phone_number, extension, call_id):
     """
     Trigger a screen pop notification for the agent.
 
-    Uses Frappe's realtime messaging (Socket.io) to push
-    notification to the user's browser.
+    Uses Frappe's built-in CallPopup (if ERPNext is available)
+    or custom popup notification.
     """
     if not phone_number:
         return
@@ -434,27 +459,138 @@ def trigger_screen_pop(phone_number, extension, call_id):
     lookup_result = lookup_phone_number(phone_number)
 
     # Find the user associated with this extension
-    # Future: Map extensions to users via PBX Extension Mapping DocType
-    # For now, broadcast to all users with System Manager role
+    from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
+    user_email = PBXUserExtension.get_user_for_extension(extension)
 
-    # Prepare notification data
-    notification_data = {
-        "type": "incoming_call",
-        "call_id": call_id,
-        "phone": phone_number,
-        "extension": extension,
-        "lookup": lookup_result,
-        "timestamp": cstr(now_datetime())
-    }
+    # Try to use ERPNext's Call Log and CallPopup
+    if frappe.db.exists("DocType", "Call Log"):
+        # Create ERPNext Call Log entry
+        call_log = create_erpnext_call_log(
+            call_id=call_id,
+            from_number=phone_number,
+            to_extension=extension,
+            lookup_result=lookup_result
+        )
 
-    # Publish to realtime channel
-    frappe.publish_realtime(
-        event="pbx_incoming_call",
-        message=notification_data,
-        after_commit=True
-    )
+        # Trigger ERPNext's built-in CallPopup
+        if user_email:
+            frappe.publish_realtime(
+                event="show_call_popup",
+                message=call_log,
+                user=user_email,
+                after_commit=True
+            )
+        else:
+            # Broadcast to all System Managers if no specific user found
+            frappe.publish_realtime(
+                event="show_call_popup",
+                message=call_log,
+                after_commit=True
+            )
 
-    frappe.logger().info(f"Screen pop triggered for {phone_number} on extension {extension}")
+        frappe.logger().info(f"ERPNext Call popup triggered for {phone_number} on extension {extension}")
+    else:
+        # Fallback to custom popup (original implementation)
+        notification_data = {
+            "type": "incoming_call",
+            "call_id": call_id,
+            "phone": phone_number,
+            "extension": extension,
+            "lookup": lookup_result,
+            "timestamp": cstr(now_datetime())
+        }
+
+        if user_email:
+            frappe.publish_realtime(
+                event="pbx_incoming_call",
+                message=notification_data,
+                user=user_email,
+                after_commit=True
+            )
+        else:
+            frappe.publish_realtime(
+                event="pbx_incoming_call",
+                message=notification_data,
+                after_commit=True
+            )
+
+        frappe.logger().info(f"Custom screen pop triggered for {phone_number} on extension {extension}")
+
+
+def create_erpnext_call_log(call_id, from_number, to_extension, lookup_result):
+    """
+    Create an ERPNext Call Log entry for incoming call.
+
+    Args:
+        call_id: Unique call identifier
+        from_number: Caller phone number
+        to_extension: Extension being called
+        lookup_result: Result from phone lookup
+
+    Returns:
+        dict: Call log data for realtime event
+    """
+    try:
+        # Check if call log already exists
+        if frappe.db.exists("Call Log", {"id": call_id}):
+            call_log = frappe.get_doc("Call Log", {"id": call_id})
+        else:
+            call_log = frappe.new_doc("Call Log")
+            call_log.id = call_id
+            call_log.to = to_extension
+            call_log.from_ = from_number  # Note: 'from' is reserved, use 'from_'
+            call_log.status = "Ringing"
+            call_log.type = "Incoming"
+            call_log.medium = to_extension
+            call_log.start_time = now_datetime()
+
+            # Link to found records
+            if lookup_result.get("contact"):
+                call_log.append("links", {
+                    "link_doctype": "Contact",
+                    "link_name": lookup_result["contact"]
+                })
+
+            if lookup_result.get("customer"):
+                call_log.append("links", {
+                    "link_doctype": "Customer",
+                    "link_name": lookup_result["customer"]
+                })
+
+            if lookup_result.get("lead"):
+                call_log.append("links", {
+                    "link_doctype": "Lead",
+                    "link_name": lookup_result["lead"]
+                })
+
+            call_log.insert(ignore_permissions=True)
+            frappe.db.commit()
+
+        # Return data for CallPopup
+        return {
+            "name": call_log.name,
+            "id": call_id,
+            "from": from_number,
+            "to": to_extension,
+            "status": "Ringing",
+            "type": "Incoming",
+            "links": [
+                {"link_doctype": link.link_doctype, "link_name": link.link_name}
+                for link in call_log.links
+            ] if hasattr(call_log, "links") else []
+        }
+
+    except Exception as e:
+        frappe.log_error(f"Failed to create ERPNext Call Log: {str(e)}", "PBX Call Log Error")
+        # Return minimal data for popup
+        return {
+            "id": call_id,
+            "from": from_number,
+            "to": to_extension,
+            "status": "Ringing",
+            "type": "Incoming",
+            "links": []
+        }
 
 
 def parse_datetime(dt_string):
