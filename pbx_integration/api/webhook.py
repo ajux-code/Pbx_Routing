@@ -241,17 +241,23 @@ def handle_yeastar_call_status(msg_data):
             ext_info = member.get("extension", {})
             extension = ext_info.get("number")
             member_status = ext_info.get("member_status")
+            channel_id = ext_info.get("channel_id")
 
-            frappe.logger().info(f"Call {call_id}: Extension {extension} status: {member_status}")
+            frappe.logger().info(f"Call {call_id}: Extension {extension} status: {member_status} channel: {channel_id}")
 
             # Handle different statuses
             if member_status in ["RING", "ALERT"]:
                 # Incoming call ringing (RING) or alerting (ALERT)
-                # For internal calls, we need to determine who is calling whom
-                # The extension in the members array is the one being alerted
-                # We need to find the caller from the CDR data
-                # For now, use the extension as both (will be fixed when CDR arrives)
-                trigger_screen_pop(extension, extension, call_id)
+                # Check if we've already triggered screen pop for this call
+                cache_key = f"pbx_screen_pop_{call_id}_{extension}"
+                if not frappe.cache().get(cache_key):
+                    # Mark as triggered (expires in 5 minutes)
+                    frappe.cache().setex(cache_key, 300, "1")
+
+                    # Trigger screen pop with channel_id
+                    trigger_screen_pop(extension, extension, call_id, channel_id)
+                else:
+                    frappe.logger().debug(f"Screen pop already triggered for call {call_id} extension {extension}")
 
             elif member_status == "ANSWERED":
                 # Call was answered - update existing log if exists
@@ -476,7 +482,7 @@ def handle_extension_status(data):
     return {"status": "ok", "message": "Extension status received"}
 
 
-def trigger_screen_pop(phone_number, extension, call_id):
+def trigger_screen_pop(phone_number, extension, call_id, channel_id=None):
     """
     Trigger a screen pop notification for the agent.
 
@@ -500,6 +506,7 @@ def trigger_screen_pop(phone_number, extension, call_id):
         "call_id": call_id,
         "phone": phone_number,
         "extension": extension,
+        "channel_id": channel_id,  # Include channel_id for answer/hangup operations
         "lookup": lookup_result,
         "timestamp": cstr(now_datetime())
     }
