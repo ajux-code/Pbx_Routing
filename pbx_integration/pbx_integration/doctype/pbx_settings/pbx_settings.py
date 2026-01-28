@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import now_datetime, add_to_date
+from frappe.utils import now_datetime, add_to_date, get_datetime
 import requests
 
 
@@ -40,7 +40,9 @@ class PBXSettings(Document):
 
         # Check if we have a valid token
         if self.access_token and self.token_expiry:
-            if now_datetime() < self.token_expiry:
+            # Convert string to datetime if needed
+            token_expiry = get_datetime(self.token_expiry) if isinstance(self.token_expiry, str) else self.token_expiry
+            if now_datetime() < token_expiry:
                 return self.access_token
 
         # Try to refresh the token
