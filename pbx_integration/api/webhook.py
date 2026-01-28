@@ -37,11 +37,15 @@ def receive():
         else:
             data = frappe.form_dict
 
-        # Log the incoming webhook for debugging (to server logs only)
+        # Log the incoming webhook for debugging
         frappe.logger().info(f"PBX Webhook received: type={data.get('type')}")
 
-        # DEBUG: Log full payload to understand Yeastar data structure
-        frappe.logger().info(f"PBX Webhook FULL DATA: {json.dumps(data, indent=2, default=str)}")
+        # DEBUG: Log full payload - visible in Error Log and browser console
+        debug_msg = f"PBX Webhook FULL DATA: {json.dumps(data, indent=2, default=str)}"
+        frappe.log_error(debug_msg, "PBX Debug - Webhook Received")
+
+        # Also send to browser console for real-time debugging
+        frappe.publish_realtime("pbx_debug", {"message": debug_msg}, after_commit=True)
 
         # Yeastar P-Series Cloud format: {type: number, sn: string, msg: "json string"}
         event_type = data.get("type")
@@ -184,8 +188,10 @@ def handle_yeastar_call_status(msg_data):
       - member_status: RING, ANSWERED, BYE, etc.
     """
     try:
-        # DEBUG: Log full msg_data to see all available fields
-        frappe.logger().info(f"PBX CallStatus msg_data: {json.dumps(msg_data, indent=2, default=str)}")
+        # DEBUG: Log full msg_data - visible in Error Log and browser console
+        debug_msg = f"PBX CallStatus msg_data: {json.dumps(msg_data, indent=2, default=str)}"
+        frappe.log_error(debug_msg, "PBX Debug - Call Status")
+        frappe.publish_realtime("pbx_debug", {"message": debug_msg}, after_commit=True)
 
         call_id = msg_data.get("call_id")
         members = msg_data.get("members", [])
