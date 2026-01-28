@@ -118,15 +118,25 @@ def handle_yeastar_cdr(msg_data):
         }
         call_type = call_type_map.get(msg_data.get("type"), "Incoming")
 
-        # Status mapping
-        status_map = {
+        # Status mapping for ERPNext Call Log
+        erpnext_status_map = {
             "ANSWERED": "Completed",
             "NO ANSWER": "No Answer",
             "BUSY": "Busy",
             "FAILED": "Failed",
             "VOICEMAIL": "No Answer"
         }
-        status = status_map.get(msg_data.get("status"), "Completed")
+        erpnext_status = erpnext_status_map.get(msg_data.get("status"), "Completed")
+
+        # Status mapping for PBX Call Log (matches DocType options)
+        pbx_status_map = {
+            "ANSWERED": "Answered",
+            "NO ANSWER": "Missed",
+            "BUSY": "Busy",
+            "FAILED": "Failed",
+            "VOICEMAIL": "Voicemail"
+        }
+        pbx_status = pbx_status_map.get(msg_data.get("status"), "Answered")
 
         caller_number = msg_data.get("call_from")
         called_number = msg_data.get("call_to")
@@ -143,7 +153,7 @@ def handle_yeastar_cdr(msg_data):
         if frappe.db.exists("DocType", "Call Log"):
             if frappe.db.exists("Call Log", {"id": call_id}):
                 call_log_doc = frappe.get_doc("Call Log", {"id": call_id})
-                call_log_doc.status = status
+                call_log_doc.status = erpnext_status
                 call_log_doc.duration = duration
                 call_log_doc.end_time = now_datetime()
                 if recording_url:
@@ -154,13 +164,13 @@ def handle_yeastar_cdr(msg_data):
                 # Trigger call ended event for CallPopup and PBXCallUI
                 frappe.publish_realtime(
                     event=f"call_{call_id}_ended",
-                    message={"id": call_id, "status": status},
+                    message={"id": call_id, "status": erpnext_status},
                     after_commit=True
                 )
 
                 frappe.publish_realtime(
                     event="pbx_call_ended",
-                    message={"call_id": call_id, "status": status},
+                    message={"call_id": call_id, "status": erpnext_status},
                     after_commit=True
                 )
 
@@ -170,7 +180,7 @@ def handle_yeastar_cdr(msg_data):
         call_log = frappe.new_doc("PBX Call Log")
         call_log.call_id = call_id
         call_log.call_type = msg_data.get("type", "Internal")
-        call_log.status = msg_data.get("status", "Answered")
+        call_log.status = pbx_status
         call_log.caller_number = caller_number
         call_log.called_number = called_number
         call_log.extension = extension
@@ -235,8 +245,12 @@ def handle_yeastar_call_status(msg_data):
             frappe.logger().info(f"Call {call_id}: Extension {extension} status: {member_status}")
 
             # Handle different statuses
-            if member_status == "RING":
-                # Incoming call ringing
+            if member_status in ["RING", "ALERT"]:
+                # Incoming call ringing (RING) or alerting (ALERT)
+                # For internal calls, we need to determine who is calling whom
+                # The extension in the members array is the one being alerted
+                # We need to find the caller from the CDR data
+                # For now, use the extension as both (will be fixed when CDR arrives)
                 trigger_screen_pop(extension, extension, call_id)
 
             elif member_status == "ANSWERED":
