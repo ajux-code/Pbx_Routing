@@ -125,15 +125,15 @@ Yeastar acts as the phone system; we passively receive events and log them. We c
 
 ---
 
-### Phase 3: Screen Pop Notifications 🔄 (In Progress)
+### Phase 3: Screen Pop Notifications ✅
 
 **Goal:** Show real-time popup when calls arrive, with caller identification.
 
-**Components to Build:**
-- **Client-side JavaScript** - Listens for Socket.io events
-- **Notification UI** - Toast/popup with caller info and action buttons
+**Components Built:**
+- **Client-side JavaScript** - Subscribes to Socket.io `pbx_incoming_call` events
+- **Notification UI** - Modal dialog with caller info and action buttons
 - **Phone Lookup API** - Searches Contacts, Leads, Customers by phone number
-- **Extension-User Mapping** (optional) - Route notifications to specific users
+- **Extension-User Mapping** - Future enhancement (currently broadcasts to all logged-in users)
 
 **User Experience:**
 ```
@@ -148,6 +148,17 @@ Phone rings → Popup appears instantly:
 └─────────────────────────────────────┘
 ```
 
+**Features:**
+- Auto-lookup of caller against Contact, Customer, and Lead records
+- Smart action buttons based on lookup results:
+  - Known contact: "Open Contact" / "Open Customer"
+  - Known customer: "Open Customer"
+  - Known lead: "Open Lead"
+  - Unknown caller: "Create Lead" / "Create Contact"
+- Auto-dismiss after 30 seconds
+- Notification sound (uses Frappe's built-in sound)
+- Phone number formatting for display
+
 **Technical Flow:**
 1. Yeastar sends `type: 30011` webhook with `member_status: "RING"`
 2. Webhook handler calls `trigger_screen_pop()`
@@ -155,9 +166,9 @@ Phone rings → Popup appears instantly:
 4. Client JS receives event and shows notification
 5. User clicks to open matched record or create new
 
-**Files (to create):**
-- `pbx_integration/public/js/pbx_screen_pop.js`
-- `pbx_integration/api/lookup.py`
+**Files:**
+- `pbx_integration/public/js/pbx_screen_pop.js` - Client-side notification handler
+- `pbx_integration/api/lookup.py` - Phone lookup API endpoints
 
 ---
 
@@ -278,6 +289,7 @@ bench --site your-site.local migrate
 |----------|--------|---------|
 | `/api/method/pbx_integration.api.webhook.receive` | POST | Receive Yeastar webhooks |
 | `/api/method/pbx_integration.api.lookup.by_phone` | GET | Look up records by phone number |
+| `/api/method/pbx_integration.api.lookup.search` | GET | Search records by phone or name |
 
 ---
 
