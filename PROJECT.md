@@ -161,16 +161,50 @@ Phone rings → Popup appears instantly:
 
 ---
 
-### Phase 4: Click-to-Call (Future)
+### Phase 4: Click-to-Call ✅
 
 **Goal:** Allow users to initiate calls from within ERPNext.
 
-**Note:** This requires Yeastar's Click-to-Call API which allows triggering calls between an extension and an external number. The PBX calls the extension first, then bridges to the destination.
+**Components Built:**
+- **PBX User Extension** (DocType) - Maps Frappe users to PBX extensions
+  - `user` - Link to Frappe User
+  - `extension` - PBX extension number (e.g., 1001)
+  - `extension_name` - Display name (optional)
+  - `enabled` - Toggle click-to-call for this user
 
-**Potential Features:**
-- Phone number links throughout ERPNext become clickable
-- Click triggers call from user's assigned extension
-- Call is logged automatically
+- **Click-to-Call API** - Server endpoint to initiate calls
+  - `make_call(callee)` - Initiates call from user's extension to phone number
+  - `get_user_extension()` - Returns current user's extension
+  - `check_click_to_call_enabled()` - Checks if feature is available
+
+- **Client-side JavaScript** - Makes phone numbers clickable
+  - Auto-detects phone fields in forms (phone, mobile, mobile_no, etc.)
+  - Processes phone numbers in list views
+  - Converts `tel:` links to click-to-call
+  - Shows confirmation dialog before calling
+  - Displays call status alerts
+
+**How it Works:**
+```
+1. User clicks phone number in ERPNext
+2. Confirmation dialog: "Call +45 12345678?"
+3. User confirms → API call to Yeastar
+4. PBX rings user's desk phone/Linkus app
+5. User answers → PBX dials the external number
+6. Calls are bridged together
+```
+
+**Configuration:**
+1. Go to PBX User Extension list
+2. Create mapping: User → Extension number
+3. Enable the mapping
+4. Phone numbers throughout ERPNext become clickable
+
+**Files:**
+- `pbx_integration/doctype/pbx_user_extension/pbx_user_extension.py`
+- `pbx_integration/doctype/pbx_user_extension/pbx_user_extension.json`
+- `pbx_integration/api/call.py`
+- `pbx_integration/public/js/pbx_click_to_call.js`
 
 ---
 

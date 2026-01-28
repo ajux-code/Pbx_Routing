@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "autoname": "field:user",
+ "creation": "2024-01-15 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "extension",
+  "column_break_1",
+  "extension_name",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Frappe user account"
+  },
+  {
+   "fieldname": "extension",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Extension",
+   "reqd": 1,
+   "description": "PBX extension number (e.g., 1001)"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "extension_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Extension Name",
+   "description": "Display name for the extension (optional)"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled",
+   "description": "Enable click-to-call for this user"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2024-01-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "PBX Integration",
+ "name": "PBX User Extension",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "All"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
