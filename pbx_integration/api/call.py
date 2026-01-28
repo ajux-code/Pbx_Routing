@@ -325,3 +325,50 @@ def _update_call_log_status(call_id, status):
 
     except Exception as e:
         frappe.log_error(f"Failed to update call log status: {str(e)}", "PBX Call Log Error")
+
+
+@frappe.whitelist()
+def is_pbx_enabled():
+    """
+    Check if PBX integration is enabled and configured.
+
+    Used by Helpdesk telephony system to detect PBX availability.
+
+    Returns:
+        dict: {
+            "pbx_enabled": bool,
+            "has_extension": bool,
+            "extension": str (if applicable)
+        }
+    """
+    try:
+        # Check if PBX Settings is enabled
+        settings = frappe.get_single("PBX Settings")
+        if not settings.enabled:
+            return {
+                "pbx_enabled": False,
+                "has_extension": False
+            }
+
+        # Check if current user has an extension mapped
+        from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
+        mapping = PBXUserExtension.get_extension_for_user()
+
+        if mapping:
+            return {
+                "pbx_enabled": True,
+                "has_extension": True,
+                "extension": mapping.extension
+            }
+        else:
+            return {
+                "pbx_enabled": True,
+                "has_extension": False
+            }
+
+    except Exception as e:
+        frappe.log_error(f"Failed to check PBX status: {str(e)}", "PBX Status Check Error")
+        return {
+            "pbx_enabled": False,
+            "has_extension": False
+        }

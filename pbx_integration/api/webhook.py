@@ -151,10 +151,16 @@ def handle_yeastar_cdr(msg_data):
                 call_log_doc.save(ignore_permissions=True)
                 frappe.db.commit()
 
-                # Trigger call ended event for CallPopup
+                # Trigger call ended event for CallPopup and PBXCallUI
                 frappe.publish_realtime(
                     event=f"call_{call_id}_ended",
                     message={"id": call_id, "status": status},
+                    after_commit=True
+                )
+
+                frappe.publish_realtime(
+                    event="pbx_call_ended",
+                    message={"call_id": call_id, "status": status},
                     after_commit=True
                 )
 
@@ -244,9 +250,21 @@ def handle_yeastar_call_status(msg_data):
                         })
                         frappe.db.commit()
 
+                # Publish status update for PBXCallUI
+                frappe.publish_realtime(
+                    event="pbx_call_status_update",
+                    message={"call_id": call_id, "status": "answered"},
+                    after_commit=True
+                )
+
             elif member_status == "BYE":
                 # Call ended - will be handled by CDR event (type 30012)
-                pass
+                # Publish call ended event for PBXCallUI
+                frappe.publish_realtime(
+                    event="pbx_call_ended",
+                    message={"call_id": call_id, "status": "ended"},
+                    after_commit=True
+                )
 
         return {"status": "ok", "message": "Call status processed"}
 
@@ -462,59 +480,42 @@ def trigger_screen_pop(phone_number, extension, call_id):
     from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
     user_email = PBXUserExtension.get_user_for_extension(extension)
 
-    # Try to use ERPNext's Call Log and CallPopup
+    # Prepare notification data for PBXCallUI (Helpdesk telephony integration)
+    notification_data = {
+        "type": "incoming_call",
+        "call_id": call_id,
+        "phone": phone_number,
+        "extension": extension,
+        "lookup": lookup_result,
+        "timestamp": cstr(now_datetime())
+    }
+
+    # Always publish to pbx_incoming_call for PBXCallUI component
+    if user_email:
+        frappe.publish_realtime(
+            event="pbx_incoming_call",
+            message=notification_data,
+            user=user_email,
+            after_commit=True
+        )
+    else:
+        # Broadcast to all System Managers if no specific user found
+        frappe.publish_realtime(
+            event="pbx_incoming_call",
+            message=notification_data,
+            after_commit=True
+        )
+
+    frappe.logger().info(f"PBX incoming call event published for {phone_number} on extension {extension}")
+
+    # Also create ERPNext Call Log if available
     if frappe.db.exists("DocType", "Call Log"):
-        # Create ERPNext Call Log entry
-        call_log = create_erpnext_call_log(
+        create_erpnext_call_log(
             call_id=call_id,
             from_number=phone_number,
             to_extension=extension,
             lookup_result=lookup_result
         )
-
-        # Trigger ERPNext's built-in CallPopup
-        if user_email:
-            frappe.publish_realtime(
-                event="show_call_popup",
-                message=call_log,
-                user=user_email,
-                after_commit=True
-            )
-        else:
-            # Broadcast to all System Managers if no specific user found
-            frappe.publish_realtime(
-                event="show_call_popup",
-                message=call_log,
-                after_commit=True
-            )
-
-        frappe.logger().info(f"ERPNext Call popup triggered for {phone_number} on extension {extension}")
-    else:
-        # Fallback to custom popup (original implementation)
-        notification_data = {
-            "type": "incoming_call",
-            "call_id": call_id,
-            "phone": phone_number,
-            "extension": extension,
-            "lookup": lookup_result,
-            "timestamp": cstr(now_datetime())
-        }
-
-        if user_email:
-            frappe.publish_realtime(
-                event="pbx_incoming_call",
-                message=notification_data,
-                user=user_email,
-                after_commit=True
-            )
-        else:
-            frappe.publish_realtime(
-                event="pbx_incoming_call",
-                message=notification_data,
-                after_commit=True
-            )
-
-        frappe.logger().info(f"Custom screen pop triggered for {phone_number} on extension {extension}")
 
 
 def create_erpnext_call_log(call_id, from_number, to_extension, lookup_result):
