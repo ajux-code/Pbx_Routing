@@ -84,6 +84,9 @@ pbx_integration.ClickToCall = class ClickToCall {
 
         // Find phone links (tel:)
         this.process_tel_links();
+
+        // Find phone numbers in custom views (Support Center, etc.)
+        this.process_custom_views();
     }
 
     process_phone_fields() {
@@ -125,6 +128,23 @@ pbx_integration.ClickToCall = class ClickToCall {
                 .attr("data-phone", phone)
                 .attr("href", "#")
                 .attr("title", "Click to call via PBX");
+        });
+    }
+
+    process_custom_views() {
+        // Support Center and other custom dashboards use custom cell classes
+        const custom_phone_selectors = [
+            ".customer-phone-cell",      // Support Center customer phone
+            ".phone-cell",               // Generic phone cell
+            "[data-field='phone']",      // Data attribute based
+            "[data-field='mobile']",
+            "[data-field='mobile_no']"
+        ];
+
+        custom_phone_selectors.forEach(selector => {
+            $(selector).each((i, el) => {
+                this.make_phone_clickable(el);
+            });
         });
     }
 
