@@ -182,3 +182,146 @@ def check_click_to_call_enabled():
         return {"enabled": False, "reason": "No extension assigned to your account"}
 
     return {"enabled": True, "extension": mapping}
+
+
+@frappe.whitelist()
+def answer_call(call_id, channel_id=None):
+    """
+    Answer an incoming call.
+
+    Args:
+        call_id: The call ID from the webhook
+        channel_id: Optional - specific channel to answer
+
+    Returns:
+        dict: {"success": bool, "message": str}
+    """
+    if not call_id:
+        return {"success": False, "message": "Call ID is required"}
+
+    # Get PBX settings and access token
+    settings = frappe.get_single("PBX Settings")
+    if not settings.enabled:
+        return {"success": False, "message": "PBX integration is disabled"}
+
+    access_token = settings.get_access_token()
+    if not access_token:
+        return {"success": False, "message": "Failed to authenticate with PBX"}
+
+    # Call Yeastar API to answer the call
+    try:
+        url = f"{settings.api_host}/openapi/v1.0/call/answer"
+
+        payload = {"call_id": call_id}
+        if channel_id:
+            payload["channel_id"] = channel_id
+
+        response = requests.post(
+            url,
+            params={"access_token": access_token},
+            json=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "OpenAPI"},
+            timeout=10,
+            verify=False
+        )
+
+        data = response.json()
+
+        if data.get("errcode") == 0:
+            # Update Call Log status if it exists
+            _update_call_log_status(call_id, "In Progress")
+
+            frappe.logger().info(f"Call {call_id} answered successfully")
+            return {"success": True, "message": "Call answered"}
+        else:
+            error_msg = data.get("errmsg", "Unknown error")
+            frappe.logger().warning(f"Failed to answer call {call_id}: {error_msg}")
+            return {"success": False, "message": f"Failed to answer call: {error_msg}"}
+
+    except Exception as e:
+        frappe.log_error(f"PBX Answer Error: {str(e)}", "PBX Call Error")
+        return {"success": False, "message": "Failed to answer call"}
+
+
+@frappe.whitelist()
+def hangup_call(call_id, channel_id=None):
+    """
+    Hang up an active call.
+
+    Args:
+        call_id: The call ID from the webhook
+        channel_id: Optional - specific channel to hang up
+
+    Returns:
+        dict: {"success": bool, "message": str}
+    """
+    if not call_id:
+        return {"success": False, "message": "Call ID is required"}
+
+    # Get PBX settings and access token
+    settings = frappe.get_single("PBX Settings")
+    if not settings.enabled:
+        return {"success": False, "message": "PBX integration is disabled"}
+
+    access_token = settings.get_access_token()
+    if not access_token:
+        return {"success": False, "message": "Failed to authenticate with PBX"}
+
+    # Call Yeastar API to hang up the call
+    try:
+        url = f"{settings.api_host}/openapi/v1.0/call/hangup"
+
+        payload = {"call_id": call_id}
+        if channel_id:
+            payload["channel_id"] = channel_id
+
+        response = requests.post(
+            url,
+            params={"access_token": access_token},
+            json=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "OpenAPI"},
+            timeout=10,
+            verify=False
+        )
+
+        data = response.json()
+
+        if data.get("errcode") == 0:
+            # Update Call Log status if it exists
+            _update_call_log_status(call_id, "Completed")
+
+            frappe.logger().info(f"Call {call_id} ended successfully")
+            return {"success": True, "message": "Call ended"}
+        else:
+            error_msg = data.get("errmsg", "Unknown error")
+            frappe.logger().warning(f"Failed to hang up call {call_id}: {error_msg}")
+            return {"success": False, "message": f"Failed to hang up: {error_msg}"}
+
+    except Exception as e:
+        frappe.log_error(f"PBX Hangup Error: {str(e)}", "PBX Call Error")
+        return {"success": False, "message": "Failed to hang up call"}
+
+
+def _update_call_log_status(call_id, status):
+    """
+    Update the status of a call log (internal helper).
+
+    Args:
+        call_id: The call ID
+        status: New status (Ringing, In Progress, Completed, etc.)
+    """
+    try:
+        # Try ERPNext Call Log first
+        if frappe.db.exists("DocType", "Call Log"):
+            if frappe.db.exists("Call Log", {"id": call_id}):
+                frappe.db.set_value("Call Log", {"id": call_id}, "status", status)
+                frappe.db.commit()
+                return
+
+        # Fallback to PBX Call Log
+        if frappe.db.exists("PBX Call Log", {"call_id": call_id}):
+            frappe.db.set_value("PBX Call Log", {"call_id": call_id}, "status", status)
+            frappe.db.commit()
+
+    except Exception as e:
+        frappe.log_error(f"Failed to update call log status: {str(e)}", "PBX Call Log Error")

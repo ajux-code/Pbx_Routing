@@ -14,41 +14,46 @@ This integration connects your cloud phone system (Yeastar P-Series) with your b
 ## Architecture
 
 ```
-┌─────────────────────┐         ┌──────────────────────┐
-│   Yeastar P-Series  │         │   Frappe/ERPNext     │
-│   Cloud PBX         │         │                      │
-│                     │         │  ┌────────────────┐  │
-│  - Handles calls    │ webhook │  │ Webhook API    │  │
-│  - Linkus app       │────────▶│  │ /api/method/   │  │
-│  - Extensions       │         │  │ pbx_integration│  │
-│                     │         │  └───────┬────────┘  │
-│                     │         │          │           │
-│                     │         │          ▼           │
-│                     │         │  ┌────────────────┐  │
-│                     │         │  │ PBX Call Log   │  │
-│                     │         │  │ DocType        │  │
-│                     │         │  └───────┬────────┘  │
-│                     │         │          │           │
-│                     │         │          ▼           │
-│                     │  socket │  ┌────────────────┐  │
-│                     │◀────────│  │ Screen Pop     │  │
-│                     │         │  │ Notification   │  │
-└─────────────────────┘         │  └────────────────┘  │
-                                └──────────────────────┘
+┌─────────────────────┐         ┌──────────────────────────────┐
+│   Yeastar P-Series  │         │      Frappe/ERPNext          │
+│   Cloud PBX         │         │                              │
+│                     │         │  ┌────────────────────────┐  │
+│  - Handles calls    │ webhook │  │ Webhook API            │  │
+│  - Linkus app       │────────▶│  │ /webhook/receive       │  │
+│  - Extensions       │         │  └──────────┬─────────────┘  │
+│                     │         │             │                │
+│                     │◀────────┤  Call       │                │
+│                     │ Control │  Control    ▼                │
+│  - Answer API       │  API    │  ┌──────────────────────┐   │
+│  - Hangup API       │◀───────│  │ ERPNext Call Log     │   │
+│  - Dial API         │         │  │ + PBX Call Log       │   │
+│                     │         │  └──────────┬───────────┘   │
+│                     │         │             │                │
+│                     │  socket │             ▼                │
+│                     │◀───────│  ┌──────────────────────┐   │
+│                     │         │  │ Frappe Telephony     │   │
+│                     │         │  │ - CallPopup UI       │   │
+│                     │         │  │ - Answer/Hangup btns │   │
+│                     │         │  │ - Click-to-call      │   │
+└─────────────────────┘         │  └──────────────────────┘   │
+                                └──────────────────────────────┘
 ```
 
 ## Integration Model
 
-**Important distinction:** This is a *webhook-based* integration, not an API-control integration.
+**Hybrid Integration:** Combines passive event monitoring with active call control.
 
-| Aspect | This Integration (Yeastar) | Active Control (e.g., Twilio) |
-|--------|---------------------------|-------------------------------|
-| Call initiation | User dials on phone/Linkus app | Code can initiate calls via API |
-| Call control | PBX handles everything | Can answer, transfer, record via API |
-| Data flow | PBX pushes events to us | We push commands to telephony API |
-| Use case | Call logging & CRM sync | Call centers, IVR, programmatic dialing |
+| Aspect | This Integration (Yeastar PBX) |
+|--------|--------------------------------|
+| **Call initiation** | ✅ Via API (`make_call`) or phone/Linkus app |
+| **Call control** | ✅ Can answer, hangup via API |
+| **Call monitoring** | ✅ Real-time webhooks for all call events |
+| **Call logging** | ✅ Automatic to ERPNext Call Log |
+| **Click-to-call** | ✅ From any phone field in ERPNext |
+| **Screen pop** | ✅ Using ERPNext's built-in CallPopup |
+| **Data flow** | ↔️ Bidirectional (webhooks + API commands) |
 
-Yeastar acts as the phone system; we passively receive events and log them. We cannot make calls or control call flow through this integration.
+**Integration Type:** Full telephony provider integration using Frappe/ERPNext's standard telephony system, similar to Twilio and Exotel integrations.
 
 ---
 
@@ -125,97 +130,100 @@ Yeastar acts as the phone system; we passively receive events and log them. We c
 
 ---
 
-### Phase 3: Screen Pop Notifications ✅
+### Phase 3: Frappe Telephony Integration ✅
 
-**Goal:** Show real-time popup when calls arrive, with caller identification.
+**Goal:** Full integration with Frappe/ERPNext's built-in telephony system for call management.
+
+**Architecture:** Integrates as a telephony provider alongside Twilio, Exotel, etc.
 
 **Components Built:**
-- **Client-side JavaScript** - Subscribes to Socket.io `pbx_incoming_call` events
-- **Notification UI** - Modal dialog with caller info and action buttons
-- **Phone Lookup API** - Searches Contacts, Leads, Customers by phone number
-- **Extension-User Mapping** - Future enhancement (currently broadcasts to all logged-in users)
+
+#### 1. **ERPNext Call Log Integration**
+- Creates entries in ERPNext's standard "Call Log" DocType
+- Automatically links calls to Contact, Customer, and Lead records
+- Tracks call status: Ringing → In Progress → Completed
+- Stores recording URLs and call duration
+
+#### 2. **Enhanced CallPopup UI**
+- Uses ERPNext's built-in `CallPopup` class for incoming calls
+- Shows caller information with linked records
+- **New:** Answer and Hangup buttons for call control
+- Real-time status updates (Ringing/In Progress/Completed)
+- Auto-dismisses on call end
 
 **User Experience:**
 ```
-Phone rings → Popup appears instantly:
+Phone rings → ERPNext CallPopup appears:
 ┌─────────────────────────────────────┐
-│ 📞 Incoming Call                    │
+│ 📞 Incoming Call (Ringing)          │
 │                                     │
 │ +45 12345678                        │
-│ John Smith - ABC Company            │
+│ John Smith                          │
+│ ABC Company                         │
 │                                     │
-│ [Open Contact]  [Create Lead]       │
+│ [Answer]  [Hangup]  [Open Contact]  │
 └─────────────────────────────────────┘
 ```
 
-**Features:**
-- Auto-lookup of caller against Contact, Customer, and Lead records
-- Smart action buttons based on lookup results:
-  - Known contact: "Open Contact" / "Open Customer"
-  - Known customer: "Open Customer"
-  - Known lead: "Open Lead"
-  - Unknown caller: "Create Lead" / "Create Contact"
-- Auto-dismiss after 30 seconds
-- Notification sound (uses Frappe's built-in sound)
-- Phone number formatting for display
+#### 3. **Call Control API**
+- `answer_call(call_id)` - Answer incoming call via Yeastar API
+- `hangup_call(call_id)` - End active call via Yeastar API
+- Real-time status synchronization with Call Log
+
+#### 4. **Extension-User Mapping**
+- **PBX User Extension** DocType maps Frappe users to PBX extensions
+- Routes incoming call notifications to specific users
+- Required for click-to-call and call control features
+
+#### 5. **Click-to-Call Handler**
+- Registers `frappe.phone_call.handler` for phone field icons
+- Clicking any phone number in ERPNext initiates a call
+- Shows real-time call status alerts
 
 **Technical Flow:**
-1. Yeastar sends `type: 30011` webhook with `member_status: "RING"`
-2. Webhook handler calls `trigger_screen_pop()`
-3. `frappe.publish_realtime("pbx_incoming_call", data)` sends to browser
-4. Client JS receives event and shows notification
-5. User clicks to open matched record or create new
+
+**Incoming Call:**
+```
+1. Yeastar sends webhook: type 30011 (RING)
+2. create_erpnext_call_log() creates Call Log entry
+3. trigger_screen_pop() publishes "show_call_popup" event
+4. ERPNext CallPopup appears with Answer/Hangup buttons
+5. User clicks Answer → answer_call() API → Yeastar answers call
+6. Webhook sends type 30012 (CDR) → Call Log updated
+```
+
+**Outgoing Call (Click-to-Call):**
+```
+1. User clicks phone number in ERPNext
+2. frappe.phone_call.handler() triggered
+3. make_call() API → Yeastar API /call/dial
+4. PBX rings user's extension
+5. User answers → PBX dials external number
+6. Calls bridged together
+7. Webhook CDR → Call Log created
+```
+
+**Features:**
+- Full integration with ERPNext telephony system
+- Answer/hangup calls directly from browser
+- Automatic call logging to standard Call Log DocType
+- Click-to-call from any phone field
+- Real-time call status tracking
+- Recording URL storage
+- User-to-extension mapping
 
 **Files:**
-- `pbx_integration/public/js/pbx_screen_pop.js` - Client-side notification handler
+- `pbx_integration/doctype/pbx_user_extension/` - Extension mapping DocType
+- `pbx_integration/api/call.py` - Call control API (answer, hangup, make_call)
+- `pbx_integration/api/webhook.py` - Enhanced with ERPNext Call Log support
+- `pbx_integration/public/js/pbx_telephony.js` - Main telephony integration
 - `pbx_integration/api/lookup.py` - Phone lookup API endpoints
 
 ---
 
-### Phase 4: Click-to-Call ✅
+### Phase 4: Recording & Analytics (Future)
 
-**Goal:** Allow users to initiate calls from within ERPNext.
-
-**Components Built:**
-- **PBX User Extension** (DocType) - Maps Frappe users to PBX extensions
-  - `user` - Link to Frappe User
-  - `extension` - PBX extension number (e.g., 1001)
-  - `extension_name` - Display name (optional)
-  - `enabled` - Toggle click-to-call for this user
-
-- **Click-to-Call API** - Server endpoint to initiate calls
-  - `make_call(callee)` - Initiates call from user's extension to phone number
-  - `get_user_extension()` - Returns current user's extension
-  - `check_click_to_call_enabled()` - Checks if feature is available
-
-- **Client-side JavaScript** - Makes phone numbers clickable
-  - Auto-detects phone fields in forms (phone, mobile, mobile_no, etc.)
-  - Processes phone numbers in list views
-  - Converts `tel:` links to click-to-call
-  - Shows confirmation dialog before calling
-  - Displays call status alerts
-
-**How it Works:**
-```
-1. User clicks phone number in ERPNext
-2. Confirmation dialog: "Call +45 12345678?"
-3. User confirms → API call to Yeastar
-4. PBX rings user's desk phone/Linkus app
-5. User answers → PBX dials the external number
-6. Calls are bridged together
-```
-
-**Configuration:**
-1. Go to PBX User Extension list
-2. Create mapping: User → Extension number
-3. Enable the mapping
-4. Phone numbers throughout ERPNext become clickable
-
-**Files:**
-- `pbx_integration/doctype/pbx_user_extension/pbx_user_extension.py`
-- `pbx_integration/doctype/pbx_user_extension/pbx_user_extension.json`
-- `pbx_integration/api/call.py`
-- `pbx_integration/public/js/pbx_click_to_call.js`
+**Goal:** Advanced call analysis and recording management.
 
 ---
 
@@ -246,18 +254,32 @@ bench --site your-site.local migrate
 ## Configuration
 
 1. **Set up Yeastar API credentials:**
-   - Go to PBX Settings in ERPNext
+   - Go to **PBX Settings** in ERPNext
    - Enter your Yeastar Cloud domain, Client ID, and Client Secret
    - Click "Get Access Token"
+   - Verify "Enabled" is checked
 
 2. **Configure Yeastar webhooks:**
-   - In Yeastar Management Portal, add webhook URL
-   - Enable events 30011 and 30012
+   - In Yeastar Management Portal → Integrations → API
+   - Add webhook URL: `https://your-domain.com/api/method/pbx_integration.api.webhook.receive`
+   - Enable events: **30011** (Call State Changed), **30012** (Call End Details)
+   - Set method: **POST**
    - Test the webhook connection
 
-3. **Verify integration:**
+3. **Map users to extensions:**
+   - Go to **PBX User Extension** list
+   - Create new entry for each user:
+     - **User**: Select Frappe user
+     - **Extension**: Enter PBX extension number (e.g., 1001)
+     - **Extension Name**: Optional display name
+     - **Enabled**: Check to activate
+   - Save
+
+4. **Verify integration:**
    - Make a test call
-   - Check PBX Call Log for new entries
+   - Check **Call Log** for new entries
+   - Click a phone number in ERPNext to test click-to-call
+   - Incoming call should show CallPopup with Answer/Hangup buttons
 
 ---
 
@@ -290,6 +312,10 @@ bench --site your-site.local migrate
 | `/api/method/pbx_integration.api.webhook.receive` | POST | Receive Yeastar webhooks |
 | `/api/method/pbx_integration.api.lookup.by_phone` | GET | Look up records by phone number |
 | `/api/method/pbx_integration.api.lookup.search` | GET | Search records by phone or name |
+| `/api/method/pbx_integration.api.call.make_call` | POST | Initiate outgoing call (click-to-call) |
+| `/api/method/pbx_integration.api.call.answer_call` | POST | Answer incoming call |
+| `/api/method/pbx_integration.api.call.hangup_call` | POST | Hang up active call |
+| `/api/method/pbx_integration.api.call.check_click_to_call_enabled` | GET | Check if user has call control enabled |
 
 ---
 
