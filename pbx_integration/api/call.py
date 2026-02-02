@@ -338,7 +338,8 @@ def is_pbx_enabled():
         dict: {
             "pbx_enabled": bool,
             "has_extension": bool,
-            "extension": str (if applicable)
+            "extension": str (if applicable),
+            "webrtc_trunk_url": str (WebRTC call link if available)
         }
     """
     try:
@@ -354,16 +355,21 @@ def is_pbx_enabled():
         from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
         mapping = PBXUserExtension.get_extension_for_user()
 
+        # Get WebRTC trunk URL if configured
+        webrtc_trunk_url = settings.get("webrtc_trunk_url") if hasattr(settings, "webrtc_trunk_url") else None
+
         if mapping:
             return {
                 "pbx_enabled": True,
                 "has_extension": True,
-                "extension": mapping.extension
+                "extension": mapping.extension,
+                "webrtc_trunk_url": webrtc_trunk_url
             }
         else:
             return {
                 "pbx_enabled": True,
-                "has_extension": False
+                "has_extension": False,
+                "webrtc_trunk_url": webrtc_trunk_url
             }
 
     except Exception as e:

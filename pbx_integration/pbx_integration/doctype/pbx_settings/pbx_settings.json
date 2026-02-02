@@ -8,6 +8,7 @@
   "api_host",
   "client_id",
   "client_secret",
+  "webrtc_trunk_url",
   "column_break_1",
   "enabled",
   "token_section",
@@ -42,6 +43,12 @@
    "label": "Client Secret",
    "reqd": 1,
    "description": "OAuth2 Client Secret from Yeastar API settings"
+  },
+  {
+   "fieldname": "webrtc_trunk_url",
+   "fieldtype": "Data",
+   "label": "WebRTC Trunk URL",
+   "description": "WebRTC inbound call link from Yeastar (for browser-based calling)"
   },
   {
    "fieldname": "column_break_1",
