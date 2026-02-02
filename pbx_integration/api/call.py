@@ -372,3 +372,100 @@ def is_pbx_enabled():
             "pbx_enabled": False,
             "has_extension": False
         }
+
+
+@frappe.whitelist()
+def get_webrtc_signature():
+    """
+    Generate WebRTC login signature for the current user's extension.
+
+    This signature is used to authenticate the WebRTC SDK client.
+    The signature is obtained from Yeastar's OpenAPI /sign/create endpoint.
+
+    Returns:
+        dict: {
+            "success": bool,
+            "secret": str (login signature),
+            "username": str (extension number),
+            "pbx_url": str (PBX WebSocket URL),
+            "message": str (error message if failed)
+        }
+    """
+    try:
+        # Get PBX settings
+        settings = frappe.get_single("PBX Settings")
+        if not settings.enabled:
+            return {"success": False, "message": "PBX integration is disabled"}
+
+        # Get current user's extension
+        from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
+        mapping = PBXUserExtension.get_extension_for_user()
+
+        if not mapping:
+            return {
+                "success": False,
+                "message": "No extension mapped to your user account"
+            }
+
+        extension = mapping.extension
+
+        # Get access token
+        access_token = settings.get_access_token()
+        if not access_token:
+            return {"success": False, "message": "Failed to authenticate with PBX"}
+
+        # Call Yeastar API to create login signature
+        url = f"{settings.api_host}/openapi/v1.0/sign/create"
+
+        payload = {
+            "username": extension,
+            "sign_type": "sdk",
+            "expire_time": 0  # 0 means no expiration
+        }
+
+        response = requests.post(
+            url,
+            params={"access_token": access_token},
+            json=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "OpenAPI"},
+            timeout=10,
+            verify=False
+        )
+
+        data = response.json()
+
+        if data.get("errcode") == 0:
+            # Success - return signature
+            signature = data.get("data", {}).get("signature")
+
+            if not signature:
+                return {
+                    "success": False,
+                    "message": "No signature returned from PBX"
+                }
+
+            # Construct WebSocket URL (typically port 8088 for WebRTC)
+            pbx_url = settings.api_host
+
+            frappe.logger().info(f"WebRTC signature generated for extension {extension}")
+
+            return {
+                "success": True,
+                "secret": signature,
+                "username": extension,
+                "pbx_url": pbx_url
+            }
+        else:
+            error_msg = data.get("errmsg", "Unknown error")
+            frappe.logger().warning(f"Failed to generate WebRTC signature: {error_msg}")
+            return {
+                "success": False,
+                "message": f"Failed to generate signature: {error_msg}"
+            }
+
+    except Exception as e:
+        frappe.log_error(f"WebRTC Signature Error: {str(e)}", "PBX WebRTC Error")
+        return {
+            "success": False,
+            "message": "Failed to generate WebRTC signature"
+        }
