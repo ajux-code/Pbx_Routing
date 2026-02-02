@@ -417,11 +417,11 @@ def get_webrtc_signature():
         # Call Yeastar API to create login signature
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
-        # Try different sign_type values if "sdk" doesn't work
-        # Possible values: "sdk", "webrtc", "linkus", "linkus_sdk"
+        # Try different sign_type values
+        # "linkus" requires premium subscription - try generic "sdk" instead
         payload = {
             "username": extension,
-            "sign_type": "linkus",  # Changed from "sdk" - try this first
+            "sign_type": "sdk",  # Generic SDK type (doesn't require Linkus SDK subscription)
             "expire_time": 0  # 0 means no expiration
         }
 
