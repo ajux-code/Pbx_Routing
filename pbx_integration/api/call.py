@@ -417,11 +417,15 @@ def get_webrtc_signature():
         # Call Yeastar API to create login signature
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
+        # Try different sign_type values if "sdk" doesn't work
+        # Possible values: "sdk", "webrtc", "linkus", "linkus_sdk"
         payload = {
             "username": extension,
-            "sign_type": "sdk",
+            "sign_type": "linkus",  # Changed from "sdk" - try this first
             "expire_time": 0  # 0 means no expiration
         }
+
+        frappe.logger().info(f"WebRTC signature request - Extension: {extension}, URL: {url}, Payload: {payload}")
 
         response = requests.post(
             url,
@@ -433,6 +437,9 @@ def get_webrtc_signature():
         )
 
         data = response.json()
+
+        # Log full response for debugging
+        frappe.logger().info(f"WebRTC signature response - Status: {response.status_code}, Response: {data}")
 
         if data.get("errcode") == 0:
             # Success - return signature
