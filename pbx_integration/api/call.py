@@ -216,6 +216,8 @@ def answer_call(call_id, channel_id=None):
         if channel_id:
             payload["channel_id"] = channel_id
 
+        frappe.logger().info(f"Attempting to answer call with payload: {payload}")
+
         response = requests.post(
             url,
             params={"access_token": access_token},
@@ -226,6 +228,7 @@ def answer_call(call_id, channel_id=None):
         )
 
         data = response.json()
+        frappe.logger().info(f"Answer API response: {data}")
 
         if data.get("errcode") == 0:
             # Update Call Log status if it exists
@@ -235,6 +238,30 @@ def answer_call(call_id, channel_id=None):
             return {"success": True, "message": "Call answered"}
         else:
             error_msg = data.get("errmsg", "Unknown error")
+
+            # If "INTERFACE NOT EXISTED" error, try without channel_id
+            if "INTERFACE NOT EXISTED" in error_msg and channel_id:
+                frappe.logger().info(f"Retrying answer without channel_id")
+                payload_retry = {"call_id": call_id}
+
+                response_retry = requests.post(
+                    url,
+                    params={"access_token": access_token},
+                    json=payload_retry,
+                    headers={"Content-Type": "application/json", "User-Agent": "OpenAPI"},
+                    timeout=10,
+                    verify=False
+                )
+
+                data_retry = response_retry.json()
+                frappe.logger().info(f"Retry answer API response: {data_retry}")
+
+                if data_retry.get("errcode") == 0:
+                    _update_call_log_status(call_id, "In Progress")
+                    return {"success": True, "message": "Call answered"}
+                else:
+                    error_msg = data_retry.get("errmsg", "Unknown error")
+
             frappe.logger().warning(f"Failed to answer call {call_id}: {error_msg}")
             return {"success": False, "message": f"Failed to answer call: {error_msg}"}
 
