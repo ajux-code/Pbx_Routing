@@ -216,7 +216,7 @@ def answer_call(call_id, channel_id=None):
         if channel_id:
             payload["channel_id"] = channel_id
 
-        frappe.logger().info(f"Attempting to answer call with payload: {payload}")
+        frappe.log_error(f"Attempting to answer call with payload: {payload}", "PBX Answer Debug")
 
         response = requests.post(
             url,
@@ -228,7 +228,7 @@ def answer_call(call_id, channel_id=None):
         )
 
         data = response.json()
-        frappe.logger().info(f"Answer API response: {data}")
+        frappe.log_error(f"Answer API response: {data}", "PBX Answer Debug")
 
         if data.get("errcode") == 0:
             # Update Call Log status if it exists
@@ -241,7 +241,7 @@ def answer_call(call_id, channel_id=None):
 
             # If "INTERFACE NOT EXISTED" error, try without channel_id
             if "INTERFACE NOT EXISTED" in error_msg and channel_id:
-                frappe.logger().info(f"Retrying answer without channel_id")
+                frappe.log_error(f"Retrying answer without channel_id", "PBX Answer Retry")
                 payload_retry = {"call_id": call_id}
 
                 response_retry = requests.post(
@@ -254,7 +254,7 @@ def answer_call(call_id, channel_id=None):
                 )
 
                 data_retry = response_retry.json()
-                frappe.logger().info(f"Retry answer API response: {data_retry}")
+                frappe.log_error(f"Retry answer API response: {data_retry}", "PBX Answer Retry")
 
                 if data_retry.get("errcode") == 0:
                     _update_call_log_status(call_id, "In Progress")
