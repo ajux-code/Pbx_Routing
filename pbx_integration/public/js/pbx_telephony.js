@@ -58,6 +58,31 @@ pbx_integration.Telephony = class Telephony {
         };
 
         console.log("PBX click-to-call handler registered");
+
+        // Intercept tel: link clicks
+        this.intercept_tel_links();
+    }
+
+    intercept_tel_links() {
+        /**
+         * Intercept clicks on tel: links and use custom phone handler instead
+         * of browser's default tel: protocol handler.
+         */
+        $(document).on("click", "a[href^='tel:']", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Extract phone number from tel: link
+            const tel_url = $(e.currentTarget).attr("href");
+            const phone_number = tel_url.replace("tel:", "");
+
+            if (phone_number) {
+                // Call our handler
+                this.initiate_call(phone_number);
+            }
+        });
+
+        console.log("Tel: link interceptor registered");
     }
 
     setup_realtime_listeners() {
