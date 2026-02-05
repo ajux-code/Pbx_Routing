@@ -450,11 +450,10 @@ def get_webrtc_signature():
         # Call Yeastar API to create login signature
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
-        # Try different sign_type values
-        # "linkus" requires premium subscription - try generic "sdk" instead
+        # Use "linkus" sign type (requires Ultimate Plan with Linkus SDK access)
         payload = {
             "username": extension,
-            "sign_type": "sdk",  # Generic SDK type (doesn't require Linkus SDK subscription)
+            "sign_type": "linkus",  # Linkus SDK type for WebRTC calling
             "expire_time": 0  # 0 means no expiration
         }
 
@@ -484,8 +483,11 @@ def get_webrtc_signature():
                     "message": "No signature returned from PBX"
                 }
 
-            # Construct WebSocket URL (typically port 8088 for WebRTC)
-            pbx_url = settings.api_host
+            # Get WebRTC Trunk URL from settings (required for Linkus SDK)
+            pbx_url = settings.get("webrtc_trunk_url") or settings.api_host
+
+            if not settings.get("webrtc_trunk_url"):
+                frappe.logger().warning(f"WebRTC Trunk URL not configured in PBX Settings - using API host as fallback: {pbx_url}")
 
             frappe.logger().info(f"WebRTC signature generated for extension {extension}")
 
