@@ -15,11 +15,17 @@ required_apps = ["frappe", "erpnext"]
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/pbx_integration/css/pbx_integration.css"
-# Removed pbx_telephony.js - now using Helpdesk's CallUI system
-# app_include_js = [
-#     "/assets/pbx_integration/js/pbx_click_to_call.js",
-# ]
+# Load Linkus SDK from CDN first
+app_include_css = [
+    "https://unpkg.com/ys-webrtc-sdk-ui/lib/ys-webrtc-sdk-ui.css",
+    "/assets/pbx_integration/css/pbx_webrtc.css"
+]
+
+app_include_js = [
+    "https://unpkg.com/ys-webrtc-sdk-ui/lib/ys-webrtc-sdk-ui.umd.js",
+    "/assets/pbx_integration/js/pbx_webrtc.js",
+    "/assets/pbx_integration/js/pbx_telephony.js"
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/pbx_integration/css/pbx_integration.css"

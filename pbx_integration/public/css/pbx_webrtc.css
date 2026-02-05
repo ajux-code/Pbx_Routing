@@ -1,0 +1,229 @@
+/* ============================================
+   PBX WebRTC Phone Widget Styles
+   ============================================ */
+
+/* Main container - floating widget */
+#pbx-webrtc-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+
+    /* Shadow and rounding for modern look */
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+
+    /* Default size */
+    width: 320px;
+    min-height: 200px;
+    max-height: 500px;
+
+    transition: all 0.3s ease;
+}
+
+/* Minimized state */
+#pbx-webrtc-container.minimized {
+    width: 60px;
+    height: 60px;
+    min-height: 60px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+/* Hidden state */
+#pbx-webrtc-container.hidden {
+    display: none;
+}
+
+/* ============================================
+   Override Linkus SDK UI Styles
+   ============================================ */
+
+/* Header styling */
+#pbx-webrtc-container .ys-webrtc-header {
+    background: var(--primary-color, #5e64ff);
+    color: white;
+    padding: 12px 16px;
+}
+
+/* Call button */
+#pbx-webrtc-container .ys-webrtc-btn-call,
+#pbx-webrtc-container [class*="call-btn"] {
+    background: var(--green-500, #28a745) !important;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+}
+
+#pbx-webrtc-container .ys-webrtc-btn-call:hover {
+    background: var(--green-600, #218838) !important;
+}
+
+/* Hangup button */
+#pbx-webrtc-container .ys-webrtc-btn-hangup,
+#pbx-webrtc-container [class*="hangup-btn"] {
+    background: var(--red-500, #dc3545) !important;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+}
+
+#pbx-webrtc-container .ys-webrtc-btn-hangup:hover {
+    background: var(--red-600, #c82333) !important;
+}
+
+/* Keypad styling */
+#pbx-webrtc-container .ys-webrtc-keypad button {
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    font-size: 18px;
+    font-weight: 500;
+    border: 1px solid var(--border-color, #d1d8dd);
+    background: white;
+    transition: background 0.2s;
+}
+
+#pbx-webrtc-container .ys-webrtc-keypad button:hover {
+    background: var(--bg-light-gray, #f5f7fa);
+}
+
+#pbx-webrtc-container .ys-webrtc-keypad button:active {
+    background: var(--bg-gray, #e9ecef);
+}
+
+/* ============================================
+   Incoming Call Animation
+   ============================================ */
+
+#pbx-webrtc-container.incoming {
+    animation: pulse-ring 1.5s infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 20px rgba(40, 167, 69, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+    }
+}
+
+/* ============================================
+   Floating Toggle Button (when minimized)
+   ============================================ */
+
+.pbx-webrtc-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--primary-color, #5e64ff);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 9999;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.pbx-webrtc-toggle:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+.pbx-webrtc-toggle svg {
+    width: 28px;
+    height: 28px;
+    fill: white;
+}
+
+/* Badge for missed calls */
+.pbx-webrtc-toggle .badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--red-500, #dc3545);
+    color: white;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============================================
+   Call Status Indicator
+   ============================================ */
+
+.pbx-call-status {
+    padding: 8px 16px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.pbx-call-status.ringing {
+    background: var(--yellow-100, #fff3cd);
+    color: var(--yellow-800, #856404);
+}
+
+.pbx-call-status.connected {
+    background: var(--green-100, #d4edda);
+    color: var(--green-800, #155724);
+}
+
+.pbx-call-status.ended {
+    background: var(--gray-100, #f8f9fa);
+    color: var(--gray-600, #6c757d);
+}
+
+/* ============================================
+   Responsive adjustments
+   ============================================ */
+
+@media (max-width: 768px) {
+    #pbx-webrtc-container {
+        width: 100%;
+        max-width: 100%;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        border-radius: 12px 12px 0 0;
+    }
+
+    #pbx-webrtc-container.minimized {
+        width: 50px;
+        height: 50px;
+        bottom: 10px;
+        right: 10px;
+        left: auto;
+    }
+}
+
+/* ============================================
+   Dark mode support
+   ============================================ */
+
+[data-theme="dark"] #pbx-webrtc-container {
+    background: var(--card-bg, #1c2126);
+    border: 1px solid var(--border-color, #2e3338);
+}
+
+[data-theme="dark"] #pbx-webrtc-container .ys-webrtc-keypad button {
+    background: var(--control-bg, #252a2f);
+    border-color: var(--border-color, #2e3338);
+    color: var(--text-color, #e8e8e8);
+}

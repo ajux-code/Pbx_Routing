@@ -11,6 +11,13 @@
   "webrtc_trunk_url",
   "column_break_1",
   "enabled",
+  "webrtc_section",
+  "enable_webrtc",
+  "webrtc_default",
+  "linkus_sdk_access_id",
+  "linkus_sdk_access_key",
+  "webrtc_column_break",
+  "webrtc_info",
   "token_section",
   "access_token",
   "refresh_token",
@@ -60,6 +67,51 @@
    "fieldtype": "Check",
    "label": "Enabled",
    "description": "Enable PBX Integration"
+  },
+  {
+   "fieldname": "webrtc_section",
+   "fieldtype": "Section Break",
+   "label": "WebRTC Browser Calling",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "enable_webrtc",
+   "fieldtype": "Check",
+   "label": "Enable Browser-Based Calling",
+   "default": "0",
+   "description": "Allow users to make calls directly in the browser using WebRTC"
+  },
+  {
+   "fieldname": "webrtc_default",
+   "fieldtype": "Check",
+   "label": "Use WebRTC as Default",
+   "default": "0",
+   "depends_on": "enable_webrtc",
+   "description": "When enabled, clicking a phone number will use browser calling instead of desk phone"
+  },
+  {
+   "fieldname": "linkus_sdk_access_id",
+   "fieldtype": "Data",
+   "label": "Linkus SDK Access ID",
+   "depends_on": "enable_webrtc",
+   "description": "Get this from Yeastar Portal > Integrations > Linkus SDK"
+  },
+  {
+   "fieldname": "linkus_sdk_access_key",
+   "fieldtype": "Password",
+   "label": "Linkus SDK Access Key",
+   "depends_on": "enable_webrtc",
+   "description": "Get this from Yeastar Portal > Integrations > Linkus SDK"
+  },
+  {
+   "fieldname": "webrtc_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "webrtc_info",
+   "fieldtype": "HTML",
+   "options": "<div class='alert alert-info'><strong>Requirements:</strong><ul><li>Yeastar P-Series Cloud Edition</li><li>Ultimate Plan subscription</li><li>Linkus SDK enabled in Yeastar Portal</li><li>HTTPS enabled on this site</li></ul><p style='margin-top: 10px;'><strong>Note:</strong> The WebRTC Trunk URL field above is used for Yeastar Cloud call link mode. For proper Linkus SDK integration, configure the Access ID and Key fields.</p></div>",
+   "depends_on": "enable_webrtc"
   },
   {
    "fieldname": "token_section",

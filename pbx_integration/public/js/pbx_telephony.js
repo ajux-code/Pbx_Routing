@@ -81,12 +81,31 @@ pbx_integration.Telephony = class Telephony {
 
     async initiate_call(phone_number, frm) {
         /**
-         * Initiate an outgoing call via PBX.
+         * Initiate an outgoing call via PBX or WebRTC.
          *
          * Args:
          *     phone_number: The number to call
          *     frm: Optional form object for context
          */
+
+        // Check if WebRTC is preferred
+        const useWebRTC = await this.shouldUseWebRTC();
+
+        if (useWebRTC) {
+            // Use browser-based WebRTC calling
+            const success = await pbx_integration.webrtc.call(phone_number);
+            if (success) {
+                // Still log the call in backend for CRM integration
+                this.log_webrtc_call(phone_number, frm);
+                return;
+            }
+
+            // Fall through to PBX API if WebRTC fails
+            frappe.show_alert({
+                message: "WebRTC failed, using desk phone...",
+                indicator: "orange"
+            }, 3);
+        }
 
         // Get link context if on a form
         let link_doctype = null;
@@ -138,6 +157,108 @@ pbx_integration.Telephony = class Telephony {
                 indicator: "red"
             }, 5);
             console.error("Click-to-call error:", error);
+        }
+    }
+
+    async shouldUseWebRTC() {
+        /**
+         * Check if user prefers WebRTC calling over desk phone.
+         *
+         * Returns:
+         *     boolean: true if WebRTC should be used, false for desk phone
+         */
+
+        // Check user preference from localStorage
+        const preference = localStorage.getItem("pbx_call_method");
+
+        if (preference === "webrtc") {
+            return true;
+        } else if (preference === "pbx") {
+            return false;
+        }
+
+        // First time: ask user preference
+        return new Promise((resolve) => {
+            const dialog = new frappe.ui.Dialog({
+                title: "Choose Calling Method",
+                fields: [
+                    {
+                        fieldtype: "HTML",
+                        options: `
+                            <div style="margin-bottom: 15px;">
+                                <p><strong>How would you like to make calls?</strong></p>
+                                <ul style="margin-top: 10px; padding-left: 20px;">
+                                    <li><strong>Browser (WebRTC):</strong> Use your computer's microphone and speakers</li>
+                                    <li><strong>Desk Phone:</strong> Use your physical desk phone</li>
+                                </ul>
+                                <p style="margin-top: 10px; font-size: 12px; color: #6c757d;">
+                                    You can change this preference later from Settings.
+                                </p>
+                            </div>
+                        `
+                    }
+                ],
+                primary_action_label: "Use Browser (WebRTC)",
+                primary_action: () => {
+                    localStorage.setItem("pbx_call_method", "webrtc");
+                    dialog.hide();
+                    resolve(true);
+                },
+                secondary_action_label: "Use Desk Phone",
+                secondary_action: () => {
+                    localStorage.setItem("pbx_call_method", "pbx");
+                    dialog.hide();
+                    resolve(false);
+                }
+            });
+
+            dialog.show();
+        });
+    }
+
+    setCallingMethod(method) {
+        /**
+         * Change the calling method preference.
+         *
+         * Args:
+         *     method: "webrtc" or "pbx"
+         */
+        if (method === "webrtc" || method === "pbx") {
+            localStorage.setItem("pbx_call_method", method);
+            frappe.show_alert({
+                message: `Calling method set to ${method === "webrtc" ? "Browser (WebRTC)" : "Desk Phone"}`,
+                indicator: "green"
+            }, 3);
+        }
+    }
+
+    async log_webrtc_call(phone_number, frm) {
+        /**
+         * Log WebRTC call in backend for CRM integration.
+         *
+         * Args:
+         *     phone_number: The number called
+         *     frm: Optional form object for context
+         */
+        let link_doctype = null;
+        let link_docname = null;
+
+        if (frm) {
+            link_doctype = frm.doctype;
+            link_docname = frm.docname;
+        }
+
+        try {
+            await frappe.call({
+                method: "pbx_integration.api.call.make_call",
+                args: {
+                    callee: phone_number,
+                    link_doctype: link_doctype,
+                    link_docname: link_docname
+                }
+            });
+        } catch (error) {
+            console.warn("Failed to log WebRTC call:", error);
         }
     }
 
