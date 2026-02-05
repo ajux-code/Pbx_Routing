@@ -179,40 +179,43 @@ pbx_integration.Telephony = class Telephony {
 
         // First time: ask user preference
         return new Promise((resolve) => {
-            const dialog = new frappe.ui.Dialog({
-                title: "Choose Calling Method",
-                fields: [
-                    {
-                        fieldtype: "HTML",
-                        options: `
-                            <div style="margin-bottom: 15px;">
-                                <p><strong>How would you like to make calls?</strong></p>
-                                <ul style="margin-top: 10px; padding-left: 20px;">
-                                    <li><strong>Browser (WebRTC):</strong> Use your computer's microphone and speakers</li>
-                                    <li><strong>Desk Phone:</strong> Use your physical desk phone</li>
-                                </ul>
-                                <p style="margin-top: 10px; font-size: 12px; color: #6c757d;">
-                                    You can change this preference later from Settings.
-                                </p>
-                            </div>
-                        `
+            // Add a small delay to avoid conflicts with click event handling
+            setTimeout(() => {
+                const dialog = new frappe.ui.Dialog({
+                    title: "Choose Calling Method",
+                    fields: [
+                        {
+                            fieldtype: "HTML",
+                            options: `
+                                <div style="margin-bottom: 15px;">
+                                    <p><strong>How would you like to make calls?</strong></p>
+                                    <ul style="margin-top: 10px; padding-left: 20px;">
+                                        <li><strong>Browser (WebRTC):</strong> Use your computer's microphone and speakers</li>
+                                        <li><strong>Desk Phone:</strong> Use your physical desk phone</li>
+                                    </ul>
+                                    <p style="margin-top: 10px; font-size: 12px; color: #6c757d;">
+                                        You can change this preference later from Settings.
+                                    </p>
+                                </div>
+                            `
+                        }
+                    ],
+                    primary_action_label: "Use Browser (WebRTC)",
+                    primary_action: () => {
+                        localStorage.setItem("pbx_call_method", "webrtc");
+                        dialog.hide();
+                        resolve(true);
+                    },
+                    secondary_action_label: "Use Desk Phone",
+                    secondary_action: () => {
+                        localStorage.setItem("pbx_call_method", "pbx");
+                        dialog.hide();
+                        resolve(false);
                     }
-                ],
-                primary_action_label: "Use Browser (WebRTC)",
-                primary_action: () => {
-                    localStorage.setItem("pbx_call_method", "webrtc");
-                    dialog.hide();
-                    resolve(true);
-                },
-                secondary_action_label: "Use Desk Phone",
-                secondary_action: () => {
-                    localStorage.setItem("pbx_call_method", "pbx");
-                    dialog.hide();
-                    resolve(false);
-                }
-            });
+                });
 
-            dialog.show();
+                dialog.show();
+            }, 100); // 100ms delay to let click event finish processing
         });
     }
 
