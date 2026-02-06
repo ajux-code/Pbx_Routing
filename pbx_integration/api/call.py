@@ -545,14 +545,18 @@ def get_webrtc_signature(debug=False):
         # Step 2: Call Yeastar API to create login signature using Linkus SDK token
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
+        # Get the user's email for the signature request
+        # Per Yeastar docs: username should be the user's email address, not extension
+        user_email = frappe.session.user  # e.g., jb@zng.dk
+
         # Use "sdk" sign type for Linkus SDK (not "linkus")
         payload = {
-            "username": extension,
+            "username": user_email,  # User's email address per Yeastar docs
             "sign_type": "sdk",  # SDK type for Linkus SDK WebRTC calling
             "expire_time": 0  # 0 means no expiration
         }
 
-        log_step("signature_request", {"url": url, "payload": payload})
+        log_step("signature_request", {"url": url, "payload": payload, "user_email": user_email})
 
         response = requests.post(
             url,
