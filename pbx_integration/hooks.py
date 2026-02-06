@@ -22,7 +22,7 @@ app_include_css = [
 ]
 
 app_include_js = [
-    "https://unpkg.com/ys-webrtc-sdk-ui/lib/ys-webrtc-sdk-ui.umd.js",
+    "https://unpkg.com/ys-webrtc-sdk-ui/lib/ys-webrtc-sdk-ui.js",
     "/assets/pbx_integration/js/pbx_webrtc.js",
     "/assets/pbx_integration/js/pbx_telephony.js"
 ]
