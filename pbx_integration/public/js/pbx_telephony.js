@@ -9,6 +9,10 @@
 
 frappe.provide("pbx_integration");
 
+// ========== DEPLOYMENT TEST v3.0 - 2024-02-06 ==========
+console.log("🚀 PBX Telephony v3.0 loaded - If you see this, JS deployment works!");
+// ========================================================
+
 pbx_integration.Telephony = class Telephony {
     constructor() {
         this.enabled = false;

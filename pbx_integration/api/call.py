@@ -434,14 +434,20 @@ def get_webrtc_signature(debug=False):
         }
     """
     debug_info = {
-        "code_version": "2.0-linkus-sdk",  # Version marker to verify deployment
+        "code_version": "3.0-deployment-test",  # Version marker to verify deployment
         "steps": []
     }
 
     def log_step(step_name, data):
-        """Helper to log debug steps"""
+        """Helper to log debug steps - also saves to Error Log for visibility"""
         debug_info["steps"].append({"step": step_name, "data": data})
         frappe.logger().info(f"WebRTC Debug [{step_name}]: {data}")
+        # Also log to Error Log doctype for easy viewing in UI
+        if debug:
+            frappe.log_error(
+                message=f"Step: {step_name}\nData: {data}",
+                title=f"WebRTC Debug - {step_name}"
+            )
 
     try:
         log_step("start", {"user": frappe.session.user, "timestamp": str(frappe.utils.now())})
