@@ -587,11 +587,9 @@ def get_webrtc_signature(debug=False):
                     "debug": debug_info if debug else None
                 }
 
-            # Get WebRTC Trunk URL from settings (required for Linkus SDK)
-            pbx_url = settings.get("webrtc_trunk_url") or settings.api_host
-
-            if not settings.get("webrtc_trunk_url"):
-                log_step("warning", {"reason": "no_webrtc_trunk_url", "using_fallback": pbx_url})
+            # SDK needs the base PBX URL, not the webtrunk call link
+            # api_host is like: https://zngreal.euycm.yeastarcloud.com
+            pbx_url = settings.api_host
 
             log_step("success", {
                 "extension": extension,
