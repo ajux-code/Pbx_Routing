@@ -415,6 +415,11 @@ def get_webrtc_signature():
     This signature is used to authenticate the WebRTC SDK client.
     The signature is obtained from Yeastar's OpenAPI /sign/create endpoint.
 
+    IMPORTANT: Linkus SDK requires authentication using its own AccessID/AccessKey,
+    not the general OpenAPI client_id/client_secret. The flow is:
+    1. Get token using Linkus SDK AccessID (as username) and AccessKey (as password)
+    2. Use that token to call /sign/create with sign_type "sdk"
+
     Returns:
         dict: {
             "success": bool,
@@ -430,6 +435,16 @@ def get_webrtc_signature():
         if not settings.enabled:
             return {"success": False, "message": "PBX integration is disabled"}
 
+        # Check if Linkus SDK credentials are configured
+        linkus_access_id = settings.get("linkus_sdk_access_id")
+        linkus_access_key = settings.get_password("linkus_sdk_access_key")
+
+        if not linkus_access_id or not linkus_access_key:
+            return {
+                "success": False,
+                "message": "Linkus SDK credentials not configured. Please add Access ID and Access Key in PBX Settings."
+            }
+
         # Get current user's extension
         from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
         mapping = PBXUserExtension.get_extension_for_user()
@@ -442,18 +457,46 @@ def get_webrtc_signature():
 
         extension = mapping.extension
 
-        # Get access token
-        access_token = settings.get_access_token()
-        if not access_token:
-            return {"success": False, "message": "Failed to authenticate with PBX"}
+        # Step 1: Get Linkus SDK access token using AccessID/AccessKey
+        # This is different from the general OpenAPI OAuth flow!
+        token_url = f"{settings.api_host}/openapi/v1.0/get_token"
+        token_payload = {
+            "username": linkus_access_id,
+            "password": linkus_access_key
+        }
 
-        # Call Yeastar API to create login signature
+        frappe.logger().info(f"Linkus SDK token request - URL: {token_url}")
+
+        token_response = requests.post(
+            token_url,
+            json=token_payload,
+            headers={"Content-Type": "application/json", "User-Agent": "OpenAPI"},
+            timeout=10,
+            verify=False
+        )
+
+        token_data = token_response.json()
+        frappe.logger().info(f"Linkus SDK token response - Status: {token_response.status_code}, errcode: {token_data.get('errcode')}")
+
+        if token_data.get("errcode") != 0:
+            error_msg = token_data.get("errmsg", "Unknown error")
+            frappe.logger().warning(f"Failed to get Linkus SDK token: {error_msg}")
+            return {
+                "success": False,
+                "message": f"Failed to get Linkus SDK token: {error_msg}"
+            }
+
+        linkus_access_token = token_data.get("access_token")
+        if not linkus_access_token:
+            return {"success": False, "message": "No access token returned from Linkus SDK authentication"}
+
+        # Step 2: Call Yeastar API to create login signature using Linkus SDK token
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
-        # Use "linkus" sign type (requires Ultimate Plan with Linkus SDK access)
+        # Use "sdk" sign type for Linkus SDK (not "linkus")
         payload = {
             "username": extension,
-            "sign_type": "linkus",  # Linkus SDK type for WebRTC calling
+            "sign_type": "sdk",  # SDK type for Linkus SDK WebRTC calling
             "expire_time": 0  # 0 means no expiration
         }
 
@@ -461,7 +504,7 @@ def get_webrtc_signature():
 
         response = requests.post(
             url,
-            params={"access_token": access_token},
+            params={"access_token": linkus_access_token},
             json=payload,
             headers={"Content-Type": "application/json", "User-Agent": "OpenAPI"},
             timeout=10,
@@ -475,9 +518,12 @@ def get_webrtc_signature():
 
         if data.get("errcode") == 0:
             # Success - return signature
-            signature = data.get("data", {}).get("signature")
+            # Note: Yeastar may return "sign" or "signature" depending on endpoint version
+            response_data = data.get("data", {})
+            signature = response_data.get("sign") or response_data.get("signature")
 
             if not signature:
+                frappe.logger().warning(f"No signature in response data: {response_data}")
                 return {
                     "success": False,
                     "message": "No signature returned from PBX"
