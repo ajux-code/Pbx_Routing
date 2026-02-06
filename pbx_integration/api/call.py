@@ -408,7 +408,7 @@ def is_pbx_enabled():
 
 
 @frappe.whitelist()
-def get_webrtc_signature():
+def get_webrtc_signature(debug=False):
     """
     Generate WebRTC login signature for the current user's extension.
 
@@ -420,42 +420,75 @@ def get_webrtc_signature():
     1. Get token using Linkus SDK AccessID (as username) and AccessKey (as password)
     2. Use that token to call /sign/create with sign_type "sdk"
 
+    Args:
+        debug (bool): If True, return detailed debug information
+
     Returns:
         dict: {
             "success": bool,
             "secret": str (login signature),
             "username": str (extension number),
             "pbx_url": str (PBX WebSocket URL),
-            "message": str (error message if failed)
+            "message": str (error message if failed),
+            "debug": dict (debug info if debug=True)
         }
     """
+    debug_info = {
+        "code_version": "2.0-linkus-sdk",  # Version marker to verify deployment
+        "steps": []
+    }
+
+    def log_step(step_name, data):
+        """Helper to log debug steps"""
+        debug_info["steps"].append({"step": step_name, "data": data})
+        frappe.logger().info(f"WebRTC Debug [{step_name}]: {data}")
+
     try:
+        log_step("start", {"user": frappe.session.user, "timestamp": str(frappe.utils.now())})
+
         # Get PBX settings
         settings = frappe.get_single("PBX Settings")
         if not settings.enabled:
-            return {"success": False, "message": "PBX integration is disabled"}
+            return {"success": False, "message": "PBX integration is disabled", "debug": debug_info if debug else None}
+
+        log_step("settings_loaded", {
+            "api_host": settings.api_host,
+            "has_linkus_access_id": bool(settings.get("linkus_sdk_access_id")),
+            "has_linkus_access_key": bool(settings.get_password("linkus_sdk_access_key")),
+            "webrtc_trunk_url": settings.get("webrtc_trunk_url")
+        })
 
         # Check if Linkus SDK credentials are configured
         linkus_access_id = settings.get("linkus_sdk_access_id")
         linkus_access_key = settings.get_password("linkus_sdk_access_key")
 
         if not linkus_access_id or not linkus_access_key:
+            log_step("error", {"reason": "missing_linkus_credentials"})
             return {
                 "success": False,
-                "message": "Linkus SDK credentials not configured. Please add Access ID and Access Key in PBX Settings."
+                "message": "Linkus SDK credentials not configured. Please add Access ID and Access Key in PBX Settings.",
+                "debug": debug_info if debug else None
             }
+
+        log_step("credentials_found", {
+            "linkus_access_id_prefix": linkus_access_id[:8] + "..." if linkus_access_id else None,
+            "linkus_access_key_length": len(linkus_access_key) if linkus_access_key else 0
+        })
 
         # Get current user's extension
         from pbx_integration.pbx_integration.doctype.pbx_user_extension.pbx_user_extension import PBXUserExtension
         mapping = PBXUserExtension.get_extension_for_user()
 
         if not mapping:
+            log_step("error", {"reason": "no_extension_mapping", "user": frappe.session.user})
             return {
                 "success": False,
-                "message": "No extension mapped to your user account"
+                "message": "No extension mapped to your user account",
+                "debug": debug_info if debug else None
             }
 
         extension = mapping.extension
+        log_step("extension_found", {"extension": extension})
 
         # Step 1: Get Linkus SDK access token using AccessID/AccessKey
         # This is different from the general OpenAPI OAuth flow!
@@ -465,7 +498,7 @@ def get_webrtc_signature():
             "password": linkus_access_key
         }
 
-        frappe.logger().info(f"Linkus SDK token request - URL: {token_url}")
+        log_step("token_request", {"url": token_url, "username_prefix": linkus_access_id[:8] + "..."})
 
         token_response = requests.post(
             token_url,
@@ -476,19 +509,32 @@ def get_webrtc_signature():
         )
 
         token_data = token_response.json()
-        frappe.logger().info(f"Linkus SDK token response - Status: {token_response.status_code}, errcode: {token_data.get('errcode')}")
+        log_step("token_response", {
+            "status_code": token_response.status_code,
+            "errcode": token_data.get("errcode"),
+            "errmsg": token_data.get("errmsg"),
+            "has_access_token": bool(token_data.get("access_token"))
+        })
 
         if token_data.get("errcode") != 0:
             error_msg = token_data.get("errmsg", "Unknown error")
-            frappe.logger().warning(f"Failed to get Linkus SDK token: {error_msg}")
+            log_step("error", {"reason": "token_request_failed", "errmsg": error_msg})
             return {
                 "success": False,
-                "message": f"Failed to get Linkus SDK token: {error_msg}"
+                "message": f"Failed to get Linkus SDK token: {error_msg}",
+                "debug": debug_info if debug else None
             }
 
         linkus_access_token = token_data.get("access_token")
         if not linkus_access_token:
-            return {"success": False, "message": "No access token returned from Linkus SDK authentication"}
+            log_step("error", {"reason": "no_token_in_response"})
+            return {
+                "success": False,
+                "message": "No access token returned from Linkus SDK authentication",
+                "debug": debug_info if debug else None
+            }
+
+        log_step("token_obtained", {"token_prefix": linkus_access_token[:8] + "..."})
 
         # Step 2: Call Yeastar API to create login signature using Linkus SDK token
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
@@ -500,7 +546,7 @@ def get_webrtc_signature():
             "expire_time": 0  # 0 means no expiration
         }
 
-        frappe.logger().info(f"WebRTC signature request - Extension: {extension}, URL: {url}, Payload: {payload}")
+        log_step("signature_request", {"url": url, "payload": payload})
 
         response = requests.post(
             url,
@@ -513,8 +559,13 @@ def get_webrtc_signature():
 
         data = response.json()
 
-        # Log full response for debugging
-        frappe.logger().info(f"WebRTC signature response - Status: {response.status_code}, Response: {data}")
+        log_step("signature_response", {
+            "status_code": response.status_code,
+            "errcode": data.get("errcode"),
+            "errmsg": data.get("errmsg"),
+            "has_data": bool(data.get("data")),
+            "data_keys": list(data.get("data", {}).keys()) if data.get("data") else []
+        })
 
         if data.get("errcode") == 0:
             # Success - return signature
@@ -523,37 +574,51 @@ def get_webrtc_signature():
             signature = response_data.get("sign") or response_data.get("signature")
 
             if not signature:
-                frappe.logger().warning(f"No signature in response data: {response_data}")
+                log_step("error", {"reason": "no_signature_in_data", "response_data": response_data})
                 return {
                     "success": False,
-                    "message": "No signature returned from PBX"
+                    "message": "No signature returned from PBX",
+                    "debug": debug_info if debug else None
                 }
 
             # Get WebRTC Trunk URL from settings (required for Linkus SDK)
             pbx_url = settings.get("webrtc_trunk_url") or settings.api_host
 
             if not settings.get("webrtc_trunk_url"):
-                frappe.logger().warning(f"WebRTC Trunk URL not configured in PBX Settings - using API host as fallback: {pbx_url}")
+                log_step("warning", {"reason": "no_webrtc_trunk_url", "using_fallback": pbx_url})
 
-            frappe.logger().info(f"WebRTC signature generated for extension {extension}")
+            log_step("success", {
+                "extension": extension,
+                "pbx_url": pbx_url,
+                "signature_length": len(signature) if signature else 0
+            })
 
             return {
                 "success": True,
                 "secret": signature,
                 "username": extension,
-                "pbx_url": pbx_url
+                "pbx_url": pbx_url,
+                "debug": debug_info if debug else None
             }
         else:
             error_msg = data.get("errmsg", "Unknown error")
-            frappe.logger().warning(f"Failed to generate WebRTC signature: {error_msg}")
+            log_step("error", {"reason": "signature_request_failed", "errmsg": error_msg, "full_response": data})
             return {
                 "success": False,
-                "message": f"Failed to generate signature: {error_msg}"
+                "message": f"Failed to generate signature: {error_msg}",
+                "debug": debug_info if debug else None
             }
 
     except Exception as e:
-        frappe.log_error(f"WebRTC Signature Error: {str(e)}", "PBX WebRTC Error")
+        import traceback
+        error_traceback = traceback.format_exc()
+        frappe.log_error(f"WebRTC Signature Error: {str(e)}\n{error_traceback}", "PBX WebRTC Error")
         return {
             "success": False,
-            "message": "Failed to generate WebRTC signature"
+            "message": f"Failed to generate WebRTC signature: {str(e)}",
+            "debug": {
+                "code_version": "2.0-linkus-sdk",
+                "error": str(e),
+                "traceback": error_traceback
+            } if debug else None
         }
