@@ -44,7 +44,7 @@
     background: var(--pbx-bg);
     border-radius: var(--pbx-radius);
     box-shadow: var(--pbx-shadow-lg);
-    overflow: hidden;
+    overflow: visible;
     transition: transform 0.2s ease, box-shadow 0.2s ease, width 0.3s ease, height 0.3s ease;
     border: 1px solid var(--pbx-border);
 }
@@ -161,9 +161,8 @@
 
 .pbx-webrtc-sdk-container {
     background: var(--pbx-bg);
-    min-height: 200px;
-    max-height: 450px;
-    overflow: auto;
+    min-height: 150px;
+    overflow: visible;
 }
 
 /* Override Linkus SDK styles */
@@ -172,9 +171,8 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
 }
 
-/* Hide SDK's default header since we have our own */
-.pbx-webrtc-sdk-container .ys-webrtc-header,
-.pbx-webrtc-sdk-container [class*="header"] {
+/* Only hide SDK's specific header class, not all elements with "header" in name */
+.pbx-webrtc-sdk-container > .ys-webrtc-header {
     display: none !important;
 }
 
@@ -183,202 +181,25 @@
     padding: 16px;
 }
 
-/* Timer/Status display */
-.pbx-webrtc-sdk-container [class*="timer"],
-.pbx-webrtc-sdk-container [class*="status"],
-.pbx-webrtc-sdk-container [class*="duration"] {
-    font-size: 32px !important;
-    font-weight: 300 !important;
-    color: var(--pbx-text) !important;
-    text-align: center;
-    padding: 20px 0;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 2px;
-}
+/* Let SDK handle its own layout */
 
-/* Call control buttons container */
-.pbx-webrtc-sdk-container [class*="controls"],
-.pbx-webrtc-sdk-container [class*="actions"],
-.pbx-webrtc-sdk-container [class*="buttons"] {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    padding: 16px;
-    flex-wrap: wrap;
-}
-
-/* Generic button styling */
+/* Let SDK handle its own button styling - only add subtle enhancements */
 .pbx-webrtc-sdk-container button {
-    min-width: 56px;
-    min-height: 56px;
-    border-radius: 50% !important;
-    border: none !important;
     cursor: pointer;
-    transition: all 0.2s ease !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 500;
-    flex-direction: column;
-    gap: 4px;
-    background: var(--pbx-bg-secondary) !important;
-    color: var(--pbx-text) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .pbx-webrtc-sdk-container button:hover {
-    transform: scale(1.08);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: scale(1.05);
 }
 
 .pbx-webrtc-sdk-container button:active {
     transform: scale(0.95);
 }
 
-/* Mute button */
-.pbx-webrtc-sdk-container button[class*="mute"],
-.pbx-webrtc-sdk-container [class*="mute"] button {
-    background: var(--pbx-bg-secondary) !important;
-}
+/* Let SDK handle button styling - removed aggressive overrides */
 
-.pbx-webrtc-sdk-container button[class*="mute"].active,
-.pbx-webrtc-sdk-container button[class*="mute"][class*="active"] {
-    background: var(--pbx-warning) !important;
-    color: white !important;
-}
-
-/* Hold button */
-.pbx-webrtc-sdk-container button[class*="hold"],
-.pbx-webrtc-sdk-container [class*="hold"] button {
-    background: var(--pbx-bg-secondary) !important;
-}
-
-.pbx-webrtc-sdk-container button[class*="hold"].active,
-.pbx-webrtc-sdk-container button[class*="hold"][class*="active"] {
-    background: var(--pbx-primary) !important;
-    color: white !important;
-}
-
-/* Call/Answer button - green */
-.pbx-webrtc-sdk-container button[class*="call"],
-.pbx-webrtc-sdk-container button[class*="answer"],
-.pbx-webrtc-sdk-container [class*="call"] button,
-.pbx-webrtc-sdk-container [class*="answer"] button {
-    background: linear-gradient(135deg, var(--pbx-success) 0%, var(--pbx-success-dark) 100%) !important;
-    color: white !important;
-    width: 64px;
-    height: 64px;
-}
-
-.pbx-webrtc-sdk-container button[class*="call"]:hover,
-.pbx-webrtc-sdk-container button[class*="answer"]:hover {
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4) !important;
-}
-
-/* Hangup/End button - red */
-.pbx-webrtc-sdk-container button[class*="hangup"],
-.pbx-webrtc-sdk-container button[class*="end"],
-.pbx-webrtc-sdk-container button[class*="reject"],
-.pbx-webrtc-sdk-container [class*="hangup"] button,
-.pbx-webrtc-sdk-container [class*="end"] button {
-    background: linear-gradient(135deg, var(--pbx-danger) 0%, var(--pbx-danger-dark) 100%) !important;
-    color: white !important;
-    width: 64px;
-    height: 64px;
-}
-
-.pbx-webrtc-sdk-container button[class*="hangup"]:hover,
-.pbx-webrtc-sdk-container button[class*="end"]:hover,
-.pbx-webrtc-sdk-container button[class*="reject"]:hover {
-    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4) !important;
-}
-
-/* Dialpad button */
-.pbx-webrtc-sdk-container button[class*="dialpad"],
-.pbx-webrtc-sdk-container button[class*="keypad"],
-.pbx-webrtc-sdk-container [class*="dialpad"] button {
-    background: var(--pbx-bg-secondary) !important;
-}
-
-/* Transfer button */
-.pbx-webrtc-sdk-container button[class*="transfer"],
-.pbx-webrtc-sdk-container [class*="transfer"] button {
-    background: var(--pbx-bg-secondary) !important;
-}
-
-/* Keypad/Dialpad grid */
-.pbx-webrtc-sdk-container [class*="keypad"],
-.pbx-webrtc-sdk-container [class*="dialpad-grid"] {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 12px !important;
-    padding: 16px !important;
-    max-width: 240px;
-    margin: 0 auto;
-}
-
-.pbx-webrtc-sdk-container [class*="keypad"] button,
-.pbx-webrtc-sdk-container [class*="dialpad-grid"] button {
-    width: 60px !important;
-    height: 60px !important;
-    border-radius: 50% !important;
-    font-size: 20px !important;
-    font-weight: 400 !important;
-    background: var(--pbx-bg-secondary) !important;
-    color: var(--pbx-text) !important;
-    border: 1px solid var(--pbx-border) !important;
-}
-
-.pbx-webrtc-sdk-container [class*="keypad"] button:hover,
-.pbx-webrtc-sdk-container [class*="dialpad-grid"] button:hover {
-    background: var(--pbx-primary) !important;
-    color: white !important;
-    border-color: var(--pbx-primary) !important;
-}
-
-/* Input fields */
-.pbx-webrtc-sdk-container input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 2px solid var(--pbx-border);
-    border-radius: var(--pbx-radius-sm);
-    font-size: 18px;
-    text-align: center;
-    background: var(--pbx-bg-secondary);
-    color: var(--pbx-text);
-    transition: border-color 0.2s, box-shadow 0.2s;
-    font-variant-numeric: tabular-nums;
-}
-
-.pbx-webrtc-sdk-container input:focus {
-    outline: none;
-    border-color: var(--pbx-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
-
-/* Caller info display */
-.pbx-webrtc-sdk-container [class*="caller"],
-.pbx-webrtc-sdk-container [class*="contact"],
-.pbx-webrtc-sdk-container [class*="number"] {
-    text-align: center;
-    padding: 16px;
-}
-
-.pbx-webrtc-sdk-container [class*="caller-name"],
-.pbx-webrtc-sdk-container [class*="contact-name"] {
-    font-size: 20px !important;
-    font-weight: 600 !important;
-    color: var(--pbx-text) !important;
-    margin-bottom: 4px;
-}
-
-.pbx-webrtc-sdk-container [class*="caller-number"],
-.pbx-webrtc-sdk-container [class*="phone-number"] {
-    font-size: 16px !important;
-    color: var(--pbx-text-muted) !important;
-    font-variant-numeric: tabular-nums;
-}
+/* Let SDK handle input and contact display */
 
 /* ============================================
    Floating Restore Button
