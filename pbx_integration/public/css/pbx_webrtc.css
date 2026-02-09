@@ -163,6 +163,20 @@
     background: var(--pbx-bg);
     min-height: 150px;
     overflow: visible;
+    /* Allow SDK to position elements absolutely relative to this container */
+    position: relative;
+}
+
+/* SDK internal elements should be visible and properly positioned */
+.pbx-webrtc-sdk-container * {
+    /* Don't let any SDK elements get hidden */
+    visibility: visible !important;
+}
+
+/* SDK call UI panels - ensure they're visible */
+.pbx-webrtc-sdk-container > div {
+    position: relative;
+    z-index: 1;
 }
 
 /* Override Linkus SDK styles */
@@ -365,6 +379,10 @@
 [class*="ys-"][class*="dialog"],
 [class*="ys-"][class*="incoming"],
 [class*="ys-"][class*="call"],
+[class*="ys-"][class*="panel"],
+[class*="ys-"][class*="control"],
+[class*="ys-"][class*="button"],
+[class*="ys-"][class*="action"],
 div[class^="ys-"],
 .ys-webrtc-ui-modal,
 .ys-webrtc-ui-overlay {
@@ -375,10 +393,57 @@ div[class^="ys-"],
 body > [class*="ys-"] {
     z-index: 10001 !important;
     position: fixed !important;
+    visibility: visible !important;
+    display: block !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* In-call panel - SDK creates this for active call controls */
+body > [class*="ys-"][class*="call"],
+body > [class*="ys-"][class*="panel"],
+body > [class*="ys-"][class*="control"],
+body > div[class^="ys-webrtc"] {
+    z-index: 10002 !important;
+    position: fixed !important;
+    visibility: visible !important;
+    display: block !important;
+    opacity: 1 !important;
+    right: 24px !important;
+    bottom: 24px !important;
 }
 
 /* Ensure SDK backdrop/overlay covers everything */
 [class*="ys-"][class*="backdrop"],
 [class*="ys-"][class*="mask"] {
     z-index: 10000 !important;
+}
+
+/* ============================================
+   In-Call State - Ensure call controls visible
+   ============================================ */
+
+/* When call is active, ensure controls are visible */
+.pbx-webrtc-wrapper.in-call .pbx-webrtc-sdk-container {
+    min-height: 200px;
+}
+
+/* SDK elements inside our container during a call */
+.pbx-webrtc-sdk-container [class*="ys-"] {
+    visibility: visible !important;
+    display: block !important;
+    opacity: 1 !important;
+}
+
+/* Specific SDK call control elements */
+.pbx-webrtc-sdk-container [class*="call-control"],
+.pbx-webrtc-sdk-container [class*="call-action"],
+.pbx-webrtc-sdk-container [class*="call-panel"],
+.pbx-webrtc-sdk-container [class*="in-call"],
+.pbx-webrtc-sdk-container [class*="active-call"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 10 !important;
 }

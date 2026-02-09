@@ -19,6 +19,7 @@ pbx_integration.WebRTC = class WebRTC {
 		this.container = null;  // SDK container
 		this.destroy = null;
 		this.on = null;
+		this.sdkObserver = null; // MutationObserver for SDK elements
 
 		// Don't auto-init - wait for explicit call
 	}
@@ -226,6 +227,9 @@ pbx_integration.WebRTC = class WebRTC {
 
 		// Load saved position
 		this.loadPosition();
+
+		// Watch for SDK elements added outside our container
+		this.setupSDKElementObserver();
 	}
 
 	/**
@@ -382,6 +386,82 @@ pbx_integration.WebRTC = class WebRTC {
 				}
 			} catch (e) {
 				console.warn("Failed to load widget position:", e);
+			}
+		}
+	}
+
+	/**
+	 * Setup MutationObserver to watch for SDK elements added to body
+	 * The Yeastar SDK sometimes creates elements outside our container
+	 */
+	setupSDKElementObserver() {
+		if (this.sdkObserver) {
+			this.sdkObserver.disconnect();
+		}
+
+		this.sdkObserver = new MutationObserver((mutations) => {
+			mutations.forEach((mutation) => {
+				mutation.addedNodes.forEach((node) => {
+					if (node.nodeType === Node.ELEMENT_NODE) {
+						// Check if this is an SDK element added to body
+						if (this.isSDKElement(node) && node.parentElement === document.body) {
+							console.log("Captured SDK element added to body:", node.className);
+							this.positionSDKElement(node);
+						}
+					}
+				});
+			});
+		});
+
+		this.sdkObserver.observe(document.body, {
+			childList: true,
+			subtree: false
+		});
+	}
+
+	/**
+	 * Check if an element belongs to the Yeastar SDK
+	 */
+	isSDKElement(element) {
+		if (!element.className) return false;
+		const className = typeof element.className === "string" ? element.className : "";
+		return className.includes("ys-") ||
+			   className.includes("webrtc") ||
+			   className.includes("call-") ||
+			   element.id?.includes("ys-");
+	}
+
+	/**
+	 * Position SDK element near our widget
+	 */
+	positionSDKElement(element) {
+		if (!this.wrapper) return;
+
+		const wrapperRect = this.wrapper.getBoundingClientRect();
+
+		// Position the SDK element relative to our wrapper
+		element.style.cssText += `
+			position: fixed !important;
+			z-index: 10002 !important;
+			visibility: visible !important;
+			display: block !important;
+			opacity: 1 !important;
+			right: ${window.innerWidth - wrapperRect.right}px !important;
+			bottom: ${window.innerHeight - wrapperRect.bottom + wrapperRect.height + 10}px !important;
+		`;
+	}
+
+	/**
+	 * Capture any SDK elements that exist outside our container
+	 */
+	captureStraySDKElements() {
+		// Find all SDK elements in body (not in our container)
+		const allElements = document.body.children;
+		for (let i = 0; i < allElements.length; i++) {
+			const el = allElements[i];
+			if (this.isSDKElement(el) && el !== this.wrapper && el.id !== "pbx-restore-btn") {
+				console.log("Found stray SDK element:", el.className);
+				this.positionSDKElement(el);
 			}
 		}
 	}
@@ -593,6 +673,10 @@ pbx_integration.WebRTC = class WebRTC {
 			}
 		}
 
+		// Capture any SDK elements that might have been added outside our container
+		// Use a small delay to let SDK render its incoming call UI
+		setTimeout(() => this.captureStraySDKElements(), 100);
+
 		// Show native browser notification if permitted
 		if (Notification.permission === "granted") {
 			new Notification("Incoming Call", {
@@ -610,14 +694,27 @@ pbx_integration.WebRTC = class WebRTC {
 		// Remove incoming animation when call is answered
 		if (this.wrapper) {
 			this.wrapper.classList.remove("incoming");
+			// Add in-call state for CSS targeting
+			this.wrapper.classList.add("in-call");
+			// Ensure widget remains visible during call
+			this.wrapper.classList.remove("hidden");
+			this.wrapper.classList.remove("minimized");
 		}
+
+		// Capture any SDK elements that might have been added outside our container
+		// Use delays to catch SDK UI at different render stages
+		this.captureStraySDKElements();
+		setTimeout(() => this.captureStraySDKElements(), 100);
+		setTimeout(() => this.captureStraySDKElements(), 500);
+
 		frappe.publish("pbx_webrtc_connected", callInfo);
 	}
 
 	onCallEnded(callInfo) {
-		// Remove incoming animation when call ends
+		// Remove incoming animation and in-call state when call ends
 		if (this.wrapper) {
 			this.wrapper.classList.remove("incoming");
+			this.wrapper.classList.remove("in-call");
 		}
 		frappe.publish("pbx_webrtc_ended", callInfo);
 	}
@@ -631,6 +728,12 @@ pbx_integration.WebRTC = class WebRTC {
 		this.destroy = null;
 		this.on = null;
 		this.currentCall = null;
+
+		// Clean up observer
+		if (this.sdkObserver) {
+			this.sdkObserver.disconnect();
+			this.sdkObserver = null;
+		}
 
 		// Remove stale wrapper and container
 		if (this.wrapper) {
@@ -650,6 +753,10 @@ pbx_integration.WebRTC = class WebRTC {
 	 */
 	disconnect() {
 		console.log("Disconnecting WebRTC SDK...");
+		if (this.sdkObserver) {
+			this.sdkObserver.disconnect();
+			this.sdkObserver = null;
+		}
 		if (this.destroy) {
 			try {
 				this.destroy();
