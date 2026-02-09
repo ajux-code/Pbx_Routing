@@ -434,7 +434,7 @@ def get_webrtc_signature(debug=False):
         }
     """
     debug_info = {
-        "code_version": "5.0-username-match-fix",  # Both sign/create AND SDK init use EXTENSION
+        "code_version": "6.0-email-for-both",  # Both sign/create AND SDK init use EMAIL per Yeastar docs
         "steps": []
     }
 
@@ -550,16 +550,16 @@ def get_webrtc_signature(debug=False):
         # Step 2: Call Yeastar API to create login signature using Linkus SDK token
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
-        # CRITICAL: The username in sign/create MUST match the username in SDK init()
+        # CRITICAL: Per Yeastar SDK UI docs, BOTH sign/create AND SDK init use EMAIL address
         # The signature embeds the username, and PBX validates they match.
-        # SDK init uses extension number (per Yeastar GitHub examples), so sign/create must too.
+        # Ref: https://help.yeastar.com/en/p-series-linkus-cloud-edition/linkus-sdk-guide/integrate-linkus-sdk-for-web-ui.html
         payload = {
-            "username": extension,  # EXTENSION - must match what SDK sends
+            "username": user_email,  # EMAIL - both sign/create and SDK init use email
             "sign_type": "sdk",  # SDK type for Linkus SDK WebRTC calling
             "expire_time": 0  # 0 means no expiration
         }
 
-        log_step("signature_request", {"url": url, "payload": payload, "extension": extension})
+        log_step("signature_request", {"url": url, "payload": payload, "user_email": user_email})
 
         response = requests.post(
             url,
@@ -599,7 +599,7 @@ def get_webrtc_signature(debug=False):
             pbx_url = settings.api_host
 
             log_step("success", {
-                "extension": extension,
+                "user_email": user_email,
                 "pbx_url": pbx_url,
                 "signature_length": len(signature) if signature else 0
             })
@@ -607,7 +607,7 @@ def get_webrtc_signature(debug=False):
             return {
                 "success": True,
                 "secret": signature,
-                "username": extension,
+                "username": user_email,  # EMAIL for SDK init - must match signature
                 "pbx_url": pbx_url,
                 "debug": debug_info if debug else None
             }
@@ -628,7 +628,7 @@ def get_webrtc_signature(debug=False):
             "success": False,
             "message": f"Failed to generate WebRTC signature: {str(e)}",
             "debug": {
-                "code_version": "5.0-username-match-fix",
+                "code_version": "6.0-email-for-both",
                 "error": str(e),
                 "traceback": error_traceback
             } if debug else None
