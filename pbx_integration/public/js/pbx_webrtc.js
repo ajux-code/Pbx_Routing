@@ -18,12 +18,14 @@ pbx_integration.WebRTC = class WebRTC {
 		this.pbx = null;        // Linkus SDK PBX operator
 		this.currentCall = null;
 		this.wrapper = null;    // Outer draggable wrapper
+		this.sdkContainer = null; // Hidden container for SDK UI
 		this.callState = "idle"; // idle, ringing, incoming, connected
 		this.isMuted = false;
 		this.isOnHold = false;
 		this.callTimer = null;
 		this.callStartTime = null;
 		this.destroy = null;
+		this.on = null;
 	}
 
 	/**
@@ -530,11 +532,11 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
-	 * Initialize Yeastar Linkus Core SDK
+	 * Initialize Yeastar Linkus UI SDK (with hidden UI - we use our custom interface)
 	 */
 	async initSDK(credentials) {
-		if (typeof window.YSWebRTC === "undefined") {
-			console.error("Linkus Core SDK not loaded");
+		if (typeof window.YSWebRTCUI === "undefined") {
+			console.error("Linkus UI SDK not loaded");
 			frappe.show_alert({
 				message: "WebRTC SDK not loaded. Please refresh the page.",
 				indicator: "red"
@@ -543,22 +545,34 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 
 		try {
-			// Core SDK init
-			const result = await window.YSWebRTC.init({
+			// Create hidden container for SDK's UI (we use our own custom UI)
+			this.sdkContainer = document.createElement("div");
+			this.sdkContainer.id = "pbx-sdk-hidden-container";
+			this.sdkContainer.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none;";
+			document.body.appendChild(this.sdkContainer);
+
+			// UI SDK init - renders to hidden container, we get phone/pbx operators
+			const result = await window.YSWebRTCUI.init(this.sdkContainer, {
 				username: credentials.username,
 				secret: credentials.secret,
-				pbxURL: credentials.pbx_url
+				pbxURL: credentials.pbx_url,
+				enableVideo: false,
+				autoAnswer: false,
+				callWaiting: true,
+				hideHeader: true,
+				hideMinimize: true
 			});
 
 			this.phone = result.phone;
 			this.pbx = result.pbx;
 			this.destroy = result.destroy;
+			this.on = result.on;
 
-			console.log("Linkus Core SDK initialized successfully");
+			console.log("Linkus UI SDK initialized successfully (UI hidden, using custom interface)");
 			return true;
 
 		} catch (error) {
-			console.error("Linkus Core SDK init failed:", error);
+			console.error("Linkus UI SDK init failed:", error);
 			return false;
 		}
 	}
@@ -567,42 +581,51 @@ pbx_integration.WebRTC = class WebRTC {
 	 * Setup event listeners for call events
 	 */
 	setupEventListeners() {
-		if (!this.phone) return;
+		if (!this.on) return;
 
 		// Incoming call
-		this.phone.on("incoming", (callInfo) => {
+		this.on("incoming", (callInfo) => {
 			console.log("Incoming call:", callInfo);
 			this.currentCall = callInfo;
 			this.onIncomingCall(callInfo);
 		});
 
-		// Outgoing call ringing
-		this.phone.on("ringing", (callInfo) => {
-			console.log("Ringing:", callInfo);
-			this.callState = "ringing";
-			this.updateUI();
-		});
-
 		// Call connected
-		this.phone.on("connected", (callInfo) => {
+		this.on("connected", (callInfo) => {
 			console.log("Call connected:", callInfo);
 			this.onCallConnected(callInfo);
 		});
 
 		// Call ended
-		this.phone.on("hangup", (callInfo) => {
+		this.on("hangup", (callInfo) => {
 			console.log("Call ended:", callInfo);
 			this.onCallEnded(callInfo);
 		});
 
+		// Connection state change
+		this.on("connectionStateChange", (state) => {
+			console.log("Connection state:", state);
+			if (state === "disconnected") {
+				this.onDisconnected();
+			}
+		});
+
 		// Error handling
-		this.phone.on("error", (error) => {
+		this.on("error", (error) => {
 			console.error("WebRTC error:", error);
 			frappe.show_alert({
 				message: `Call error: ${error.message || error}`,
 				indicator: "red"
 			}, 5);
 		});
+	}
+
+	/**
+	 * Handle SDK disconnection
+	 */
+	onDisconnected() {
+		console.log("WebRTC disconnected - will reinit on next call");
+		this.cleanup();
 	}
 
 	/**
@@ -906,10 +929,15 @@ pbx_integration.WebRTC = class WebRTC {
 			this.wrapper.remove();
 			this.wrapper = null;
 		}
+		if (this.sdkContainer) {
+			this.sdkContainer.remove();
+			this.sdkContainer = null;
+		}
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;
 		this.destroy = null;
+		this.on = null;
 		this.currentCall = null;
 		this.callState = "idle";
 		this.isMuted = false;
