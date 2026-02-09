@@ -15,14 +15,13 @@ required_apps = ["frappe", "erpnext"]
 # ------------------
 
 # include js, css files in header of desk.html
-# Load Linkus SDK from CDN first
+# Load Linkus Core SDK (not UI SDK - we build our own UI)
 app_include_css = [
-    "https://unpkg.com/ys-webrtc-sdk-ui/lib/ys-webrtc-sdk-ui.css",
     "/assets/pbx_integration/css/pbx_webrtc.css"
 ]
 
 app_include_js = [
-    "https://unpkg.com/ys-webrtc-sdk-ui/lib/ys-webrtc-sdk-ui.js",
+    "https://unpkg.com/ys-webrtc-sdk-core@1.0.4/lib/YSWebRTC.js",
     "/assets/pbx_integration/js/pbx_webrtc.js",
     "/assets/pbx_integration/js/pbx_telephony.js"
 ]
