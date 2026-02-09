@@ -434,7 +434,7 @@ def get_webrtc_signature(debug=False):
         }
     """
     debug_info = {
-        "code_version": "3.0-deployment-test",  # Version marker to verify deployment
+        "code_version": "4.0-email-username-fix",  # Fixed: sign/create uses EMAIL, SDK init uses EXTENSION
         "steps": []
     }
 
@@ -494,7 +494,12 @@ def get_webrtc_signature(debug=False):
             }
 
         extension = mapping.extension
-        log_step("extension_found", {"extension": extension})
+
+        # Get user email - this is what the PBX uses to identify the user
+        # The sign/create API requires EMAIL, while SDK init requires EXTENSION
+        user_email = frappe.session.user  # e.g., "jb@zng.dk"
+
+        log_step("extension_found", {"extension": extension, "user_email": user_email})
 
         # Step 1: Get Linkus SDK access token using AccessID/AccessKey
         # This is different from the general OpenAPI OAuth flow!
@@ -545,16 +550,17 @@ def get_webrtc_signature(debug=False):
         # Step 2: Call Yeastar API to create login signature using Linkus SDK token
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
-        # IMPORTANT: The signature username MUST match what the SDK uses for login
-        # The SDK logs in with extension number, so we must create signature for extension
-        # Use "sdk" sign type for Linkus SDK (not "linkus")
+        # IMPORTANT: Per Yeastar docs, sign/create requires EMAIL address
+        # But SDK init() requires EXTENSION number. These are intentionally different!
+        # - sign/create: identifies the USER account (by email)
+        # - SDK init: identifies the PHONE to register as (by extension)
         payload = {
-            "username": extension,  # Extension number - must match SDK login username
+            "username": user_email,  # EMAIL address - identifies the user in PBX
             "sign_type": "sdk",  # SDK type for Linkus SDK WebRTC calling
             "expire_time": 0  # 0 means no expiration
         }
 
-        log_step("signature_request", {"url": url, "payload": payload, "extension": extension})
+        log_step("signature_request", {"url": url, "payload": payload, "user_email": user_email, "extension": extension})
 
         response = requests.post(
             url,
@@ -623,7 +629,7 @@ def get_webrtc_signature(debug=False):
             "success": False,
             "message": f"Failed to generate WebRTC signature: {str(e)}",
             "debug": {
-                "code_version": "2.0-linkus-sdk",
+                "code_version": "4.0-email-username-fix",
                 "error": str(e),
                 "traceback": error_traceback
             } if debug else None
