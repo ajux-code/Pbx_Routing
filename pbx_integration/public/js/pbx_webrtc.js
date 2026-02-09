@@ -545,6 +545,18 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 
 		try {
+			// Get default audio devices first to prevent SDK device errors
+			let audioDevices = { microphoneId: "", speakerId: "" };
+			try {
+				const devices = await navigator.mediaDevices.enumerateDevices();
+				const microphone = devices.find(d => d.kind === "audioinput");
+				const speaker = devices.find(d => d.kind === "audiooutput");
+				if (microphone) audioDevices.microphoneId = microphone.deviceId;
+				if (speaker) audioDevices.speakerId = speaker.deviceId;
+			} catch (e) {
+				console.warn("Could not enumerate devices:", e);
+			}
+
 			// Create hidden container for SDK's UI (we use our own custom UI)
 			this.sdkContainer = document.createElement("div");
 			this.sdkContainer.id = "pbx-sdk-hidden-container";
@@ -560,7 +572,10 @@ pbx_integration.WebRTC = class WebRTC {
 				autoAnswer: false,
 				callWaiting: true,
 				hideHeader: true,
-				hideMinimize: true
+				hideMinimize: true,
+				// Provide default device IDs to prevent undefined errors
+				microphoneId: audioDevices.microphoneId,
+				speakerId: audioDevices.speakerId
 			});
 
 			this.phone = result.phone;
