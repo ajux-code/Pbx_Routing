@@ -882,13 +882,19 @@ pbx_integration.WebRTC = class WebRTC {
 			clearInterval(this.callTimer);
 			this.callTimer = null;
 		}
-		this.wrapper.querySelector(".pbx-call-timer").textContent = "";
+		if (this.wrapper) {
+			const timerEl = this.wrapper.querySelector(".pbx-call-timer");
+			if (timerEl) timerEl.textContent = "";
+		}
 	}
 
 	/**
 	 * Cleanup and reset
 	 */
 	cleanup() {
+		// Stop timer first while wrapper still exists
+		this.stopCallTimer();
+
 		if (this.destroy) {
 			try {
 				this.destroy();
@@ -900,7 +906,6 @@ pbx_integration.WebRTC = class WebRTC {
 			this.wrapper.remove();
 			this.wrapper = null;
 		}
-		this.stopCallTimer();
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;
