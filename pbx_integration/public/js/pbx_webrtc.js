@@ -15,7 +15,8 @@ pbx_integration.WebRTC = class WebRTC {
 		this.phone = null;      // Linkus SDK phone operator
 		this.pbx = null;        // Linkus SDK PBX operator
 		this.currentCall = null;
-		this.container = null;
+		this.wrapper = null;    // Outer draggable wrapper
+		this.container = null;  // SDK container
 		this.destroy = null;
 		this.on = null;
 
@@ -42,10 +43,11 @@ pbx_integration.WebRTC = class WebRTC {
 				console.warn("Error destroying old SDK instance:", e);
 			}
 		}
-		if (this.container) {
-			this.container.remove();
-			this.container = null;
+		if (this.wrapper) {
+			this.wrapper.remove();
+			this.wrapper = null;
 		}
+		this.container = null;
 		this.phone = null;
 		this.pbx = null;
 		this.destroy = null;
@@ -164,19 +166,224 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
-	 * Create DOM container for SDK UI
+	 * Create DOM container for SDK UI with custom draggable wrapper
 	 */
 	createContainer() {
-		// Remove existing container if present
-		if (this.container) {
-			this.container.remove();
+		// Remove existing wrapper if present
+		const existingWrapper = document.getElementById("pbx-webrtc-wrapper");
+		if (existingWrapper) {
+			existingWrapper.remove();
 		}
 
-		// Create floating phone widget container
+		// Create outer wrapper for dragging
+		this.wrapper = document.createElement("div");
+		this.wrapper.id = "pbx-webrtc-wrapper";
+		this.wrapper.className = "pbx-webrtc-wrapper";
+
+		// Create custom header with drag handle
+		const header = document.createElement("div");
+		header.className = "pbx-webrtc-header";
+		header.innerHTML = `
+			<div class="pbx-header-drag-handle">
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+					<circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/>
+					<circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+				</svg>
+			</div>
+			<div class="pbx-header-title">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+				</svg>
+				<span>Phone</span>
+			</div>
+			<div class="pbx-header-actions">
+				<button class="pbx-btn-minimize" title="Minimize">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M19 13H5v-2h14v2z"/>
+					</svg>
+				</button>
+				<button class="pbx-btn-close" title="Close">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+					</svg>
+				</button>
+			</div>
+		`;
+
+		// Create SDK container
 		this.container = document.createElement("div");
 		this.container.id = "pbx-webrtc-container";
-		this.container.className = "pbx-webrtc-widget";
-		document.body.appendChild(this.container);
+		this.container.className = "pbx-webrtc-sdk-container";
+
+		// Assemble
+		this.wrapper.appendChild(header);
+		this.wrapper.appendChild(this.container);
+		document.body.appendChild(this.wrapper);
+
+		// Setup dragging and controls
+		this.setupDraggable(header);
+		this.setupHeaderControls(header);
+
+		// Load saved position
+		this.loadPosition();
+	}
+
+	/**
+	 * Setup draggable functionality
+	 */
+	setupDraggable(header) {
+		let isDragging = false;
+		let startX, startY, startLeft, startTop;
+
+		const dragHandle = header.querySelector(".pbx-header-drag-handle");
+
+		const onMouseDown = (e) => {
+			// Only drag from the header, not buttons
+			if (e.target.closest("button")) return;
+
+			isDragging = true;
+			this.wrapper.classList.add("dragging");
+
+			const rect = this.wrapper.getBoundingClientRect();
+			startX = e.clientX;
+			startY = e.clientY;
+			startLeft = rect.left;
+			startTop = rect.top;
+
+			document.addEventListener("mousemove", onMouseMove);
+			document.addEventListener("mouseup", onMouseUp);
+			e.preventDefault();
+		};
+
+		const onMouseMove = (e) => {
+			if (!isDragging) return;
+
+			const deltaX = e.clientX - startX;
+			const deltaY = e.clientY - startY;
+
+			let newLeft = startLeft + deltaX;
+			let newTop = startTop + deltaY;
+
+			// Keep within viewport bounds
+			const wrapperRect = this.wrapper.getBoundingClientRect();
+			const maxLeft = window.innerWidth - wrapperRect.width;
+			const maxTop = window.innerHeight - wrapperRect.height;
+
+			newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+			newTop = Math.max(0, Math.min(newTop, maxTop));
+
+			this.wrapper.style.left = newLeft + "px";
+			this.wrapper.style.top = newTop + "px";
+			this.wrapper.style.right = "auto";
+			this.wrapper.style.bottom = "auto";
+		};
+
+		const onMouseUp = () => {
+			isDragging = false;
+			this.wrapper.classList.remove("dragging");
+			document.removeEventListener("mousemove", onMouseMove);
+			document.removeEventListener("mouseup", onMouseUp);
+
+			// Save position
+			this.savePosition();
+		};
+
+		header.addEventListener("mousedown", onMouseDown);
+
+		// Touch support for mobile
+		header.addEventListener("touchstart", (e) => {
+			if (e.target.closest("button")) return;
+			const touch = e.touches[0];
+			onMouseDown({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {} });
+		});
+
+		document.addEventListener("touchmove", (e) => {
+			if (!isDragging) return;
+			const touch = e.touches[0];
+			onMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+		});
+
+		document.addEventListener("touchend", onMouseUp);
+	}
+
+	/**
+	 * Setup header control buttons
+	 */
+	setupHeaderControls(header) {
+		const minimizeBtn = header.querySelector(".pbx-btn-minimize");
+		const closeBtn = header.querySelector(".pbx-btn-close");
+
+		minimizeBtn.addEventListener("click", () => {
+			this.wrapper.classList.toggle("minimized");
+			this.savePosition();
+		});
+
+		closeBtn.addEventListener("click", () => {
+			this.wrapper.classList.add("hidden");
+			// Show a floating button to restore
+			this.showRestoreButton();
+		});
+	}
+
+	/**
+	 * Show floating button to restore the phone widget
+	 */
+	showRestoreButton() {
+		let restoreBtn = document.getElementById("pbx-restore-btn");
+		if (!restoreBtn) {
+			restoreBtn = document.createElement("button");
+			restoreBtn.id = "pbx-restore-btn";
+			restoreBtn.className = "pbx-restore-btn";
+			restoreBtn.innerHTML = `
+				<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+					<path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+				</svg>
+			`;
+			restoreBtn.addEventListener("click", () => {
+				this.wrapper.classList.remove("hidden");
+				restoreBtn.classList.add("hidden");
+			});
+			document.body.appendChild(restoreBtn);
+		}
+		restoreBtn.classList.remove("hidden");
+	}
+
+	/**
+	 * Save widget position to localStorage
+	 */
+	savePosition() {
+		if (!this.wrapper) return;
+		const rect = this.wrapper.getBoundingClientRect();
+		const position = {
+			left: this.wrapper.style.left,
+			top: this.wrapper.style.top,
+			minimized: this.wrapper.classList.contains("minimized")
+		};
+		localStorage.setItem("pbx_widget_position", JSON.stringify(position));
+	}
+
+	/**
+	 * Load saved widget position
+	 */
+	loadPosition() {
+		if (!this.wrapper) return;
+		const saved = localStorage.getItem("pbx_widget_position");
+		if (saved) {
+			try {
+				const position = JSON.parse(saved);
+				if (position.left) this.wrapper.style.left = position.left;
+				if (position.top) this.wrapper.style.top = position.top;
+				if (position.left || position.top) {
+					this.wrapper.style.right = "auto";
+					this.wrapper.style.bottom = "auto";
+				}
+				if (position.minimized) {
+					this.wrapper.classList.add("minimized");
+				}
+			} catch (e) {
+				console.warn("Failed to load widget position:", e);
+			}
+		}
 	}
 
 	/**
@@ -402,11 +609,12 @@ pbx_integration.WebRTC = class WebRTC {
 		this.on = null;
 		this.currentCall = null;
 
-		// Remove stale container
-		if (this.container) {
-			this.container.remove();
-			this.container = null;
+		// Remove stale wrapper and container
+		if (this.wrapper) {
+			this.wrapper.remove();
+			this.wrapper = null;
 		}
+		this.container = null;
 
 		frappe.show_alert({
 			message: "WebRTC disconnected. Will reconnect on next call.",
@@ -426,10 +634,11 @@ pbx_integration.WebRTC = class WebRTC {
 				console.warn("Error during SDK destroy:", e);
 			}
 		}
-		if (this.container) {
-			this.container.remove();
-			this.container = null;
+		if (this.wrapper) {
+			this.wrapper.remove();
+			this.wrapper = null;
 		}
+		this.container = null;
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;

@@ -1,229 +1,533 @@
 /* ============================================
-   PBX WebRTC Phone Widget Styles
+   PBX WebRTC Phone Widget - Modern UI
    ============================================ */
 
-/* Main container - floating widget */
-#pbx-webrtc-container {
+/* CSS Variables for theming */
+:root {
+    --pbx-primary: #6366f1;
+    --pbx-primary-dark: #4f46e5;
+    --pbx-success: #10b981;
+    --pbx-success-dark: #059669;
+    --pbx-danger: #ef4444;
+    --pbx-danger-dark: #dc2626;
+    --pbx-warning: #f59e0b;
+    --pbx-bg: #ffffff;
+    --pbx-bg-secondary: #f8fafc;
+    --pbx-text: #1e293b;
+    --pbx-text-muted: #64748b;
+    --pbx-border: #e2e8f0;
+    --pbx-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    --pbx-shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    --pbx-radius: 16px;
+    --pbx-radius-sm: 8px;
+}
+
+/* Dark mode support */
+[data-theme="dark"] {
+    --pbx-bg: #1e293b;
+    --pbx-bg-secondary: #0f172a;
+    --pbx-text: #f1f5f9;
+    --pbx-text-muted: #94a3b8;
+    --pbx-border: #334155;
+}
+
+/* ============================================
+   Main Wrapper - Draggable Container
+   ============================================ */
+
+.pbx-webrtc-wrapper {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    bottom: 24px;
+    right: 24px;
     z-index: 10000;
-
-    /* Shadow and rounding for modern look */
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    border-radius: 12px;
+    width: 340px;
+    background: var(--pbx-bg);
+    border-radius: var(--pbx-radius);
+    box-shadow: var(--pbx-shadow-lg);
     overflow: hidden;
-    background: white;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, width 0.3s ease, height 0.3s ease;
+    border: 1px solid var(--pbx-border);
+}
 
-    /* Default size */
-    width: 320px;
-    min-height: 200px;
-    max-height: 500px;
+.pbx-webrtc-wrapper:hover {
+    box-shadow: var(--pbx-shadow-lg), 0 0 0 1px var(--pbx-primary);
+}
 
-    transition: all 0.3s ease;
+.pbx-webrtc-wrapper.dragging {
+    cursor: grabbing;
+    opacity: 0.95;
+    transform: scale(1.02);
+    box-shadow: var(--pbx-shadow-lg), 0 0 40px rgba(99, 102, 241, 0.3);
 }
 
 /* Minimized state */
-#pbx-webrtc-container.minimized {
-    width: 60px;
-    height: 60px;
-    min-height: 60px;
-    border-radius: 50%;
-    cursor: pointer;
+.pbx-webrtc-wrapper.minimized {
+    width: 200px;
+    height: auto;
+}
+
+.pbx-webrtc-wrapper.minimized .pbx-webrtc-sdk-container {
+    display: none;
+}
+
+.pbx-webrtc-wrapper.minimized .pbx-header-title span {
+    display: inline;
 }
 
 /* Hidden state */
-#pbx-webrtc-container.hidden {
+.pbx-webrtc-wrapper.hidden {
     display: none;
 }
 
 /* ============================================
-   Override Linkus SDK UI Styles
+   Custom Header
    ============================================ */
 
-/* Header styling */
-#pbx-webrtc-container .ys-webrtc-header {
-    background: var(--primary-color, #5e64ff);
-    color: white;
+.pbx-webrtc-header {
+    display: flex;
+    align-items: center;
     padding: 12px 16px;
+    background: linear-gradient(135deg, var(--pbx-primary) 0%, var(--pbx-primary-dark) 100%);
+    color: white;
+    cursor: grab;
+    user-select: none;
+    gap: 12px;
 }
 
-/* Call button */
-#pbx-webrtc-container .ys-webrtc-btn-call,
-#pbx-webrtc-container [class*="call-btn"] {
-    background: var(--green-500, #28a745) !important;
+.pbx-webrtc-header:active {
+    cursor: grabbing;
+}
+
+.pbx-header-drag-handle {
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    transition: opacity 0.2s;
+}
+
+.pbx-webrtc-header:hover .pbx-header-drag-handle {
+    opacity: 1;
+}
+
+.pbx-header-title {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.01em;
+}
+
+.pbx-header-title svg {
+    opacity: 0.9;
+}
+
+.pbx-header-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.pbx-header-actions button {
+    width: 28px;
+    height: 28px;
     border: none;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.1s;
 }
 
-#pbx-webrtc-container .ys-webrtc-btn-call:hover {
-    background: var(--green-600, #218838) !important;
+.pbx-header-actions button:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05);
 }
 
-/* Hangup button */
-#pbx-webrtc-container .ys-webrtc-btn-hangup,
-#pbx-webrtc-container [class*="hangup-btn"] {
-    background: var(--red-500, #dc3545) !important;
-    border: none;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
+.pbx-header-actions button:active {
+    transform: scale(0.95);
 }
 
-#pbx-webrtc-container .ys-webrtc-btn-hangup:hover {
-    background: var(--red-600, #c82333) !important;
+.pbx-btn-close:hover {
+    background: var(--pbx-danger) !important;
 }
 
-/* Keypad styling */
-#pbx-webrtc-container .ys-webrtc-keypad button {
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    font-size: 18px;
+/* ============================================
+   SDK Container Styling
+   ============================================ */
+
+.pbx-webrtc-sdk-container {
+    background: var(--pbx-bg);
+    min-height: 200px;
+    max-height: 450px;
+    overflow: auto;
+}
+
+/* Override Linkus SDK styles */
+#pbx-webrtc-container,
+.pbx-webrtc-sdk-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* Hide SDK's default header since we have our own */
+.pbx-webrtc-sdk-container .ys-webrtc-header,
+.pbx-webrtc-sdk-container [class*="header"] {
+    display: none !important;
+}
+
+/* Style the SDK content area */
+.pbx-webrtc-sdk-container > div {
+    padding: 16px;
+}
+
+/* Timer/Status display */
+.pbx-webrtc-sdk-container [class*="timer"],
+.pbx-webrtc-sdk-container [class*="status"],
+.pbx-webrtc-sdk-container [class*="duration"] {
+    font-size: 32px !important;
+    font-weight: 300 !important;
+    color: var(--pbx-text) !important;
+    text-align: center;
+    padding: 20px 0;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+}
+
+/* Call control buttons container */
+.pbx-webrtc-sdk-container [class*="controls"],
+.pbx-webrtc-sdk-container [class*="actions"],
+.pbx-webrtc-sdk-container [class*="buttons"] {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    padding: 16px;
+    flex-wrap: wrap;
+}
+
+/* Generic button styling */
+.pbx-webrtc-sdk-container button {
+    min-width: 56px;
+    min-height: 56px;
+    border-radius: 50% !important;
+    border: none !important;
+    cursor: pointer;
+    transition: all 0.2s ease !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
     font-weight: 500;
-    border: 1px solid var(--border-color, #d1d8dd);
-    background: white;
-    transition: background 0.2s;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--pbx-bg-secondary) !important;
+    color: var(--pbx-text) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-#pbx-webrtc-container .ys-webrtc-keypad button:hover {
-    background: var(--bg-light-gray, #f5f7fa);
+.pbx-webrtc-sdk-container button:hover {
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-#pbx-webrtc-container .ys-webrtc-keypad button:active {
-    background: var(--bg-gray, #e9ecef);
+.pbx-webrtc-sdk-container button:active {
+    transform: scale(0.95);
+}
+
+/* Mute button */
+.pbx-webrtc-sdk-container button[class*="mute"],
+.pbx-webrtc-sdk-container [class*="mute"] button {
+    background: var(--pbx-bg-secondary) !important;
+}
+
+.pbx-webrtc-sdk-container button[class*="mute"].active,
+.pbx-webrtc-sdk-container button[class*="mute"][class*="active"] {
+    background: var(--pbx-warning) !important;
+    color: white !important;
+}
+
+/* Hold button */
+.pbx-webrtc-sdk-container button[class*="hold"],
+.pbx-webrtc-sdk-container [class*="hold"] button {
+    background: var(--pbx-bg-secondary) !important;
+}
+
+.pbx-webrtc-sdk-container button[class*="hold"].active,
+.pbx-webrtc-sdk-container button[class*="hold"][class*="active"] {
+    background: var(--pbx-primary) !important;
+    color: white !important;
+}
+
+/* Call/Answer button - green */
+.pbx-webrtc-sdk-container button[class*="call"],
+.pbx-webrtc-sdk-container button[class*="answer"],
+.pbx-webrtc-sdk-container [class*="call"] button,
+.pbx-webrtc-sdk-container [class*="answer"] button {
+    background: linear-gradient(135deg, var(--pbx-success) 0%, var(--pbx-success-dark) 100%) !important;
+    color: white !important;
+    width: 64px;
+    height: 64px;
+}
+
+.pbx-webrtc-sdk-container button[class*="call"]:hover,
+.pbx-webrtc-sdk-container button[class*="answer"]:hover {
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4) !important;
+}
+
+/* Hangup/End button - red */
+.pbx-webrtc-sdk-container button[class*="hangup"],
+.pbx-webrtc-sdk-container button[class*="end"],
+.pbx-webrtc-sdk-container button[class*="reject"],
+.pbx-webrtc-sdk-container [class*="hangup"] button,
+.pbx-webrtc-sdk-container [class*="end"] button {
+    background: linear-gradient(135deg, var(--pbx-danger) 0%, var(--pbx-danger-dark) 100%) !important;
+    color: white !important;
+    width: 64px;
+    height: 64px;
+}
+
+.pbx-webrtc-sdk-container button[class*="hangup"]:hover,
+.pbx-webrtc-sdk-container button[class*="end"]:hover,
+.pbx-webrtc-sdk-container button[class*="reject"]:hover {
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4) !important;
+}
+
+/* Dialpad button */
+.pbx-webrtc-sdk-container button[class*="dialpad"],
+.pbx-webrtc-sdk-container button[class*="keypad"],
+.pbx-webrtc-sdk-container [class*="dialpad"] button {
+    background: var(--pbx-bg-secondary) !important;
+}
+
+/* Transfer button */
+.pbx-webrtc-sdk-container button[class*="transfer"],
+.pbx-webrtc-sdk-container [class*="transfer"] button {
+    background: var(--pbx-bg-secondary) !important;
+}
+
+/* Keypad/Dialpad grid */
+.pbx-webrtc-sdk-container [class*="keypad"],
+.pbx-webrtc-sdk-container [class*="dialpad-grid"] {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 12px !important;
+    padding: 16px !important;
+    max-width: 240px;
+    margin: 0 auto;
+}
+
+.pbx-webrtc-sdk-container [class*="keypad"] button,
+.pbx-webrtc-sdk-container [class*="dialpad-grid"] button {
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 50% !important;
+    font-size: 20px !important;
+    font-weight: 400 !important;
+    background: var(--pbx-bg-secondary) !important;
+    color: var(--pbx-text) !important;
+    border: 1px solid var(--pbx-border) !important;
+}
+
+.pbx-webrtc-sdk-container [class*="keypad"] button:hover,
+.pbx-webrtc-sdk-container [class*="dialpad-grid"] button:hover {
+    background: var(--pbx-primary) !important;
+    color: white !important;
+    border-color: var(--pbx-primary) !important;
+}
+
+/* Input fields */
+.pbx-webrtc-sdk-container input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid var(--pbx-border);
+    border-radius: var(--pbx-radius-sm);
+    font-size: 18px;
+    text-align: center;
+    background: var(--pbx-bg-secondary);
+    color: var(--pbx-text);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-variant-numeric: tabular-nums;
+}
+
+.pbx-webrtc-sdk-container input:focus {
+    outline: none;
+    border-color: var(--pbx-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Caller info display */
+.pbx-webrtc-sdk-container [class*="caller"],
+.pbx-webrtc-sdk-container [class*="contact"],
+.pbx-webrtc-sdk-container [class*="number"] {
+    text-align: center;
+    padding: 16px;
+}
+
+.pbx-webrtc-sdk-container [class*="caller-name"],
+.pbx-webrtc-sdk-container [class*="contact-name"] {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    color: var(--pbx-text) !important;
+    margin-bottom: 4px;
+}
+
+.pbx-webrtc-sdk-container [class*="caller-number"],
+.pbx-webrtc-sdk-container [class*="phone-number"] {
+    font-size: 16px !important;
+    color: var(--pbx-text-muted) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Floating Restore Button
+   ============================================ */
+
+.pbx-restore-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--pbx-primary) 0%, var(--pbx-primary-dark) 100%);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--pbx-shadow);
+    z-index: 9999;
+    transition: transform 0.2s, box-shadow 0.2s;
+    color: white;
+}
+
+.pbx-restore-btn:hover {
+    transform: scale(1.1);
+    box-shadow: var(--pbx-shadow-lg);
+}
+
+.pbx-restore-btn:active {
+    transform: scale(0.95);
+}
+
+.pbx-restore-btn.hidden {
+    display: none;
+}
+
+/* Pulse animation for incoming calls */
+.pbx-restore-btn.incoming {
+    animation: pbx-pulse 1.5s infinite;
+}
+
+@keyframes pbx-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 20px rgba(99, 102, 241, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
 }
 
 /* ============================================
    Incoming Call Animation
    ============================================ */
 
-#pbx-webrtc-container.incoming {
-    animation: pulse-ring 1.5s infinite;
+.pbx-webrtc-wrapper.incoming {
+    animation: pbx-ring 0.5s ease-in-out infinite alternate;
 }
 
-@keyframes pulse-ring {
+@keyframes pbx-ring {
     0% {
-        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
-    }
-    70% {
-        box-shadow: 0 0 0 20px rgba(40, 167, 69, 0);
+        transform: rotate(-1deg);
+        box-shadow: var(--pbx-shadow-lg), 0 0 30px rgba(16, 185, 129, 0.5);
     }
     100% {
-        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+        transform: rotate(1deg);
+        box-shadow: var(--pbx-shadow-lg), 0 0 50px rgba(16, 185, 129, 0.7);
     }
 }
 
 /* ============================================
-   Floating Toggle Button (when minimized)
+   Responsive Design
    ============================================ */
 
-.pbx-webrtc-toggle {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: var(--primary-color, #5e64ff);
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    z-index: 9999;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
+@media (max-width: 480px) {
+    .pbx-webrtc-wrapper {
+        width: calc(100% - 32px);
+        max-width: 340px;
+        bottom: 16px;
+        right: 16px;
+    }
 
-.pbx-webrtc-toggle:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-}
-
-.pbx-webrtc-toggle svg {
-    width: 28px;
-    height: 28px;
-    fill: white;
-}
-
-/* Badge for missed calls */
-.pbx-webrtc-toggle .badge {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: var(--red-500, #dc3545);
-    color: white;
-    border-radius: 50%;
-    width: 22px;
-    height: 22px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    .pbx-webrtc-wrapper.minimized {
+        width: 160px;
+    }
 }
 
 /* ============================================
-   Call Status Indicator
+   Scrollbar Styling
    ============================================ */
 
+.pbx-webrtc-sdk-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.pbx-webrtc-sdk-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pbx-webrtc-sdk-container::-webkit-scrollbar-thumb {
+    background: var(--pbx-border);
+    border-radius: 3px;
+}
+
+.pbx-webrtc-sdk-container::-webkit-scrollbar-thumb:hover {
+    background: var(--pbx-text-muted);
+}
+
+/* ============================================
+   Legacy Styles (for backwards compatibility)
+   ============================================ */
+
+/* Old container ID - redirect to new styles */
+#pbx-webrtc-container {
+    background: transparent;
+}
+
+.pbx-webrtc-toggle {
+    /* Deprecated - use .pbx-restore-btn instead */
+    display: none;
+}
+
+/* Call status badges */
 .pbx-call-status {
-    padding: 8px 16px;
-    text-align: center;
-    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .pbx-call-status.ringing {
-    background: var(--yellow-100, #fff3cd);
-    color: var(--yellow-800, #856404);
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--pbx-warning);
 }
 
 .pbx-call-status.connected {
-    background: var(--green-100, #d4edda);
-    color: var(--green-800, #155724);
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--pbx-success);
 }
 
 .pbx-call-status.ended {
-    background: var(--gray-100, #f8f9fa);
-    color: var(--gray-600, #6c757d);
-}
-
-/* ============================================
-   Responsive adjustments
-   ============================================ */
-
-@media (max-width: 768px) {
-    #pbx-webrtc-container {
-        width: 100%;
-        max-width: 100%;
-        bottom: 0;
-        right: 0;
-        left: 0;
-        border-radius: 12px 12px 0 0;
-    }
-
-    #pbx-webrtc-container.minimized {
-        width: 50px;
-        height: 50px;
-        bottom: 10px;
-        right: 10px;
-        left: auto;
-    }
-}
-
-/* ============================================
-   Dark mode support
-   ============================================ */
-
-[data-theme="dark"] #pbx-webrtc-container {
-    background: var(--card-bg, #1c2126);
-    border: 1px solid var(--border-color, #2e3338);
-}
-
-[data-theme="dark"] #pbx-webrtc-container .ys-webrtc-keypad button {
-    background: var(--control-bg, #252a2f);
-    border-color: var(--border-color, #2e3338);
-    color: var(--text-color, #e8e8e8);
+    background: var(--pbx-bg-secondary);
+    color: var(--pbx-text-muted);
 }
