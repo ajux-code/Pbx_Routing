@@ -101,7 +101,13 @@ pbx_integration.Telephony = class Telephony {
         });
 
         // Listen for custom PBX popup event (fallback)
+        // Only use this when WebRTC is NOT handling the call
         frappe.realtime.on("pbx_incoming_call", (data) => {
+            // Skip if WebRTC is active - it handles its own UI
+            if (pbx_integration.webrtc && pbx_integration.webrtc.initialized) {
+                console.log("Skipping fallback popup - WebRTC is active");
+                return;
+            }
             this.handle_custom_incoming_call(data);
         });
 
@@ -504,8 +510,14 @@ pbx_integration.Telephony = class Telephony {
             indicator: "blue"
         }, 15);
 
-        // Play notification sound
-        frappe.utils.play_sound("call");
+        // Play notification sound (wrapped in try-catch as sound may not exist)
+        try {
+            if (frappe.utils.play_sound) {
+                frappe.utils.play_sound("alert");  // Use "alert" which is more likely to exist
+            }
+        } catch (e) {
+            console.warn("Could not play notification sound:", e);
+        }
     }
 };
 
