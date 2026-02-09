@@ -352,3 +352,33 @@
     background: var(--pbx-bg-secondary);
     color: var(--pbx-text-muted);
 }
+
+/* ============================================
+   SDK Global Elements (modals, overlays, popups)
+   The SDK may create elements outside our container
+   ============================================ */
+
+/* Ensure any Yeastar SDK modals/overlays are visible above everything */
+[class*="ys-"][class*="modal"],
+[class*="ys-"][class*="overlay"],
+[class*="ys-"][class*="popup"],
+[class*="ys-"][class*="dialog"],
+[class*="ys-"][class*="incoming"],
+[class*="ys-"][class*="call"],
+div[class^="ys-"],
+.ys-webrtc-ui-modal,
+.ys-webrtc-ui-overlay {
+    z-index: 10001 !important;
+}
+
+/* SDK may append elements directly to body - ensure they're visible */
+body > [class*="ys-"] {
+    z-index: 10001 !important;
+    position: fixed !important;
+}
+
+/* Ensure SDK backdrop/overlay covers everything */
+[class*="ys-"][class*="backdrop"],
+[class*="ys-"][class*="mask"] {
+    z-index: 10000 !important;
+}

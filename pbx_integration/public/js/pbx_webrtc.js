@@ -578,6 +578,21 @@ pbx_integration.WebRTC = class WebRTC {
 	// ============ Event Handlers ============
 
 	onIncomingCall(callInfo) {
+		// IMPORTANT: Ensure the widget is visible for incoming calls
+		if (this.wrapper) {
+			// Remove hidden state
+			this.wrapper.classList.remove("hidden");
+			// Remove minimized state so user can see the call UI
+			this.wrapper.classList.remove("minimized");
+			// Add incoming animation
+			this.wrapper.classList.add("incoming");
+			// Hide restore button if visible
+			const restoreBtn = document.getElementById("pbx-restore-btn");
+			if (restoreBtn) {
+				restoreBtn.classList.add("hidden");
+			}
+		}
+
 		// Show native browser notification if permitted
 		if (Notification.permission === "granted") {
 			new Notification("Incoming Call", {
@@ -592,10 +607,18 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	onCallConnected(callInfo) {
+		// Remove incoming animation when call is answered
+		if (this.wrapper) {
+			this.wrapper.classList.remove("incoming");
+		}
 		frappe.publish("pbx_webrtc_connected", callInfo);
 	}
 
 	onCallEnded(callInfo) {
+		// Remove incoming animation when call ends
+		if (this.wrapper) {
+			this.wrapper.classList.remove("incoming");
+		}
 		frappe.publish("pbx_webrtc_ended", callInfo);
 	}
 
