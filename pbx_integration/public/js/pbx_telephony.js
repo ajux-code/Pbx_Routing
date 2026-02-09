@@ -510,21 +510,13 @@ pbx_integration.Telephony = class Telephony {
             indicator: "blue"
         }, 15);
 
-        // Play notification sound (handle async errors from autoplay restrictions)
+        // Play notification sound (silently fail if blocked by autoplay policy)
         if (frappe.utils.play_sound) {
-            try {
-                // play_sound returns a Promise, so we need to catch rejections
-                const playPromise = frappe.utils.play_sound("alert");
-                if (playPromise && playPromise.catch) {
-                    playPromise.catch((e) => {
-                        // Autoplay was blocked - this is normal on first page load
-                        console.log("Sound playback blocked by browser autoplay policy");
-                    });
-                }
-            } catch (e) {
-                // Synchronous error (e.g., sound file doesn't exist)
-                console.log("Could not play notification sound:", e.message);
-            }
+            // Wrap in Promise.resolve to ensure we catch any rejection,
+            // regardless of whether play_sound returns a Promise or throws
+            Promise.resolve().then(() => frappe.utils.play_sound("alert")).catch(() => {
+                // Silently ignore - browser autoplay restrictions are normal
+            });
         }
     }
 };
