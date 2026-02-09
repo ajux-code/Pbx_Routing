@@ -26,10 +26,31 @@ pbx_integration.WebRTC = class WebRTC {
 	 * Initialize the Linkus SDK WebRTC client
 	 */
 	async init() {
-		if (this.initialized) {
+		// If already initialized AND phone exists, we're good
+		if (this.initialized && this.phone) {
 			console.log("WebRTC already initialized");
 			return true;
 		}
+
+		console.log("Initializing WebRTC SDK...");
+
+		// Clean up any stale state before re-initializing
+		if (this.destroy) {
+			try {
+				this.destroy();
+			} catch (e) {
+				console.warn("Error destroying old SDK instance:", e);
+			}
+		}
+		if (this.container) {
+			this.container.remove();
+			this.container = null;
+		}
+		this.phone = null;
+		this.pbx = null;
+		this.destroy = null;
+		this.on = null;
+		this.initialized = false;
 
 		// Check microphone permission first
 		const hasMic = await this.requestMicrophonePermission();
@@ -250,14 +271,20 @@ pbx_integration.WebRTC = class WebRTC {
 	 * Make an outgoing call
 	 */
 	async call(phoneNumber) {
-		if (!this.initialized) {
+		// Check both initialized flag AND phone object existence
+		// After a call ends, the SDK may be destroyed and need re-initialization
+		if (!this.initialized || !this.phone) {
+			console.log("WebRTC needs initialization, phone:", this.phone, "initialized:", this.initialized);
 			const ready = await this.init();
-			if (!ready) return false;
+			if (!ready) {
+				console.error("WebRTC re-initialization failed");
+				return false;
+			}
 		}
 
 		if (!this.phone) {
 			frappe.show_alert({
-				message: "Phone not ready",
+				message: "Phone not ready after init",
 				indicator: "red"
 			}, 3);
 			return false;
@@ -366,9 +393,23 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	onDisconnected() {
+		console.log("WebRTC disconnected - resetting state");
+		// Reset all state so next call triggers full re-initialization
 		this.initialized = false;
+		this.phone = null;
+		this.pbx = null;
+		this.destroy = null;
+		this.on = null;
+		this.currentCall = null;
+
+		// Remove stale container
+		if (this.container) {
+			this.container.remove();
+			this.container = null;
+		}
+
 		frappe.show_alert({
-			message: "WebRTC disconnected. Click phone icon to reconnect.",
+			message: "WebRTC disconnected. Will reconnect on next call.",
 			indicator: "orange"
 		}, 5);
 	}
@@ -377,15 +418,24 @@ pbx_integration.WebRTC = class WebRTC {
 	 * Cleanup and disconnect
 	 */
 	disconnect() {
+		console.log("Disconnecting WebRTC SDK...");
 		if (this.destroy) {
-			this.destroy();
+			try {
+				this.destroy();
+			} catch (e) {
+				console.warn("Error during SDK destroy:", e);
+			}
 		}
 		if (this.container) {
 			this.container.remove();
+			this.container = null;
 		}
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;
+		this.destroy = null;
+		this.on = null;
+		this.currentCall = null;
 	}
 };
 
