@@ -37,10 +37,39 @@ pbx_integration.Telephony = class Telephony {
             // Setup realtime listeners for CallPopup
             this.setup_realtime_listeners();
 
+            // Proactively initialize WebRTC if user prefers it (or hasn't chosen yet)
+            // This ensures incoming calls can be received via WebRTC
+            this.initWebRTCIfNeeded();
+
             frappe.show_alert({
                 message: `PBX Ready - Extension ${this.extension}`,
                 indicator: "green"
             }, 3);
+        }
+    }
+
+    async initWebRTCIfNeeded() {
+        /**
+         * Initialize WebRTC SDK proactively if user prefers WebRTC calling.
+         * This ensures incoming calls can be received even before making an outgoing call.
+         */
+        const preference = localStorage.getItem("pbx_call_method");
+
+        // Initialize if user prefers WebRTC, or hasn't chosen yet (default to WebRTC)
+        if (preference === "webrtc" || preference === null) {
+            console.log("Proactively initializing WebRTC for incoming calls...");
+
+            // Initialize in background - don't block UI
+            if (pbx_integration.webrtc) {
+                const success = await pbx_integration.webrtc.init();
+                if (success) {
+                    console.log("WebRTC initialized - ready for incoming calls");
+                } else {
+                    console.log("WebRTC init failed - will use fallback for incoming calls");
+                }
+            }
+        } else {
+            console.log("WebRTC disabled by user preference - using desk phone mode");
         }
     }
 
