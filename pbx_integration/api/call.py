@@ -434,7 +434,7 @@ def get_webrtc_signature(debug=False):
         }
     """
     debug_info = {
-        "code_version": "4.0-email-username-fix",  # Fixed: sign/create uses EMAIL, SDK init uses EXTENSION
+        "code_version": "5.0-username-match-fix",  # Both sign/create AND SDK init use EXTENSION
         "steps": []
     }
 
@@ -550,17 +550,16 @@ def get_webrtc_signature(debug=False):
         # Step 2: Call Yeastar API to create login signature using Linkus SDK token
         url = f"{settings.api_host}/openapi/v1.0/sign/create"
 
-        # IMPORTANT: Per Yeastar docs, sign/create requires EMAIL address
-        # But SDK init() requires EXTENSION number. These are intentionally different!
-        # - sign/create: identifies the USER account (by email)
-        # - SDK init: identifies the PHONE to register as (by extension)
+        # CRITICAL: The username in sign/create MUST match the username in SDK init()
+        # The signature embeds the username, and PBX validates they match.
+        # SDK init uses extension number (per Yeastar GitHub examples), so sign/create must too.
         payload = {
-            "username": user_email,  # EMAIL address - identifies the user in PBX
+            "username": extension,  # EXTENSION - must match what SDK sends
             "sign_type": "sdk",  # SDK type for Linkus SDK WebRTC calling
             "expire_time": 0  # 0 means no expiration
         }
 
-        log_step("signature_request", {"url": url, "payload": payload, "user_email": user_email, "extension": extension})
+        log_step("signature_request", {"url": url, "payload": payload, "extension": extension})
 
         response = requests.post(
             url,
@@ -629,7 +628,7 @@ def get_webrtc_signature(debug=False):
             "success": False,
             "message": f"Failed to generate WebRTC signature: {str(e)}",
             "debug": {
-                "code_version": "4.0-email-username-fix",
+                "code_version": "5.0-username-match-fix",
                 "error": str(e),
                 "traceback": error_traceback
             } if debug else None
