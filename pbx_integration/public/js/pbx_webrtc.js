@@ -287,6 +287,10 @@ pbx_integration.WebRTC = class WebRTC {
 			case 'idle':
 				this.hideIncomingCallUI();
 				this.stopCallTimer();
+				// Clear all call references
+				this.currentCall = null;
+				this.currentSession = null;
+				this.currentCallId = null;
 				if (headerText) headerText.textContent = "Phone";
 				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
 				break;
@@ -316,6 +320,10 @@ pbx_integration.WebRTC = class WebRTC {
 			case 'ended':
 				this.hideIncomingCallUI();
 				this.stopCallTimer();
+				// Clear call references when ended
+				this.currentCall = null;
+				this.currentSession = null;
+				this.currentCallId = null;
 				if (headerText) headerText.textContent = "Call Ended";
 				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
 				// Auto-return to idle after 2 seconds
@@ -860,9 +868,15 @@ pbx_integration.WebRTC = class WebRTC {
 
 		frappe.realtime.on("pbx_call_ended", (data) => {
 			console.log("[realtime] pbx_call_ended:", data);
-			if (this.callState !== 'idle') {
+			// IMPORTANT: Don't trust this event when SDK session is active
+			// The Frappe realtime uses PBX call IDs, but SDK uses its own UUIDs
+			// Only end the call if we don't have an active SDK session
+			if (this.callState !== 'idle' && !this.currentSession) {
+				console.log("Ending call based on realtime event (no active SDK session)");
 				this.currentCall = null;
 				this.setCallState('ended', data);
+			} else if (this.currentSession) {
+				console.log("Ignoring pbx_call_ended - SDK session is still active");
 			}
 		});
 	}
