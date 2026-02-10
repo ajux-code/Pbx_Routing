@@ -490,7 +490,52 @@ pbx_integration.WebRTC = class WebRTC {
 			if (timerDisplay) {
 				timerDisplay.textContent = timeStr;
 			}
+
+			// Periodic check: verify call is still active
+			// Every 3 seconds, check if the SDK still has an active call
+			if (this.callDuration % 3 === 0 && this.callState === 'active') {
+				this.checkCallStillActive();
+			}
 		}, 1000);
+	}
+
+	/**
+	 * Check if the call is still active via SDK
+	 * This catches cases where the remote party ended the call but we missed the event
+	 */
+	checkCallStillActive() {
+		if (!this.phone || this.callState !== 'active') return;
+
+		// Try to get current calls from SDK
+		const methodsToCheck = ['getCurrentCalls', 'getActiveCalls', 'getSessions', 'getCalls'];
+
+		for (const method of methodsToCheck) {
+			if (typeof this.phone[method] === 'function') {
+				try {
+					const result = this.phone[method]();
+					// If we get an empty result, call may have ended
+					if (result && typeof result === 'object') {
+						const hasActiveCalls = Array.isArray(result) ? result.length > 0 : Object.keys(result).length > 0;
+						if (!hasActiveCalls) {
+							console.log(`checkCallStillActive: No active calls found via ${method}, ending call`);
+							this.setCallState('ended');
+							return;
+						}
+					}
+				} catch (e) {
+					// Ignore errors
+				}
+			}
+		}
+
+		// Also check if our session is still valid
+		if (this.currentSession) {
+			const status = this.currentSession.status || this.currentSession._status;
+			if (status === 'ended' || status === 'terminated' || status === 'failed') {
+				console.log("checkCallStillActive: Session status is", status, "- ending call");
+				this.setCallState('ended');
+			}
+		}
 	}
 
 	/**
@@ -785,33 +830,24 @@ pbx_integration.WebRTC = class WebRTC {
 		});
 
 		// Call ended - try multiple event names
-		this.on("hangup", (callInfo) => {
-			console.log("Call hangup event:", callInfo);
+		const handleCallEnded = (eventName, callInfo) => {
+			console.log(`Call ${eventName} event:`, callInfo);
 			this.currentCall = null;
-			this.setCallState('ended', callInfo);
-			this.onCallEnded(callInfo);
-		});
+			this.currentSession = null;
+			this.currentCallId = null;
+			if (this.callState !== 'idle' && this.callState !== 'ended') {
+				this.setCallState('ended', callInfo);
+				this.onCallEnded(callInfo);
+			}
+		};
 
-		this.on("ended", (callInfo) => {
-			console.log("Call ended event:", callInfo);
-			this.currentCall = null;
-			this.setCallState('ended', callInfo);
-			this.onCallEnded(callInfo);
-		});
-
-		this.on("terminated", (callInfo) => {
-			console.log("Call terminated event:", callInfo);
-			this.currentCall = null;
-			this.setCallState('ended', callInfo);
-			this.onCallEnded(callInfo);
-		});
-
-		this.on("failed", (callInfo) => {
-			console.log("Call failed event:", callInfo);
-			this.currentCall = null;
-			this.setCallState('ended', callInfo);
-			this.onCallEnded(callInfo);
-		});
+		this.on("hangup", (callInfo) => handleCallEnded("hangup", callInfo));
+		this.on("ended", (callInfo) => handleCallEnded("ended", callInfo));
+		this.on("terminated", (callInfo) => handleCallEnded("terminated", callInfo));
+		this.on("failed", (callInfo) => handleCallEnded("failed", callInfo));
+		this.on("endSession", (callInfo) => handleCallEnded("endSession", callInfo));
+		this.on("bye", (callInfo) => handleCallEnded("bye", callInfo));
+		this.on("cancel", (callInfo) => handleCallEnded("cancel", callInfo));
 
 		// Connection status
 		this.on("connectionStateChange", (state) => {
@@ -908,7 +944,9 @@ pbx_integration.WebRTC = class WebRTC {
 							this.currentCall = null;
 							this.currentSession = null;
 							this.currentCallId = null;
-							this.setCallState('ended');
+							if (this.callState !== 'idle' && this.callState !== 'ended') {
+								this.setCallState('ended');
+							}
 						};
 
 						session.on('accepted', () => {
@@ -924,6 +962,16 @@ pbx_integration.WebRTC = class WebRTC {
 						session.on('terminated', (data) => endCall('terminated'));
 						session.on('failed', (data) => endCall('failed'));
 						session.on('bye', (data) => endCall('bye'));
+						session.on('cancel', (data) => endCall('cancel'));
+						session.on('refer', (data) => endCall('refer'));
+
+						// Also watch for status changes
+						session.on('statusChanged', (status) => {
+							console.log("[session.on] statusChanged:", status);
+							if (status === 'ended' || status === 'terminated' || status === 'failed') {
+								endCall('statusChanged:' + status);
+							}
+						});
 					}
 				}
 			}
@@ -968,11 +1016,34 @@ pbx_integration.WebRTC = class WebRTC {
 				}
 
 				// Call ended events from SDK
-				if (evt === 'sessionEnded' || evt === 'callEnded') {
-					console.log("SDK reports call ended");
+				if (evt === 'sessionEnded' || evt === 'callEnded' || evt === 'disconnected') {
+					console.log("SDK reports call ended via event:", evt);
+					this.currentCall = null;
+					this.currentSession = null;
+					this.currentCallId = null;
 					this.setCallState('ended');
 				}
 			});
+		});
+
+		// Also listen for endSession event specifically
+		this.phone.on('endSession', (data) => {
+			console.log("[phone.on] endSession:", data);
+			this.currentCall = null;
+			this.currentSession = null;
+			this.currentCallId = null;
+			this.setCallState('ended');
+		});
+
+		// Listen for session terminated/bye events
+		this.phone.on('terminated', (data) => {
+			console.log("[phone.on] terminated:", data);
+			this.setCallState('ended');
+		});
+
+		this.phone.on('bye', (data) => {
+			console.log("[phone.on] bye:", data);
+			this.setCallState('ended');
 		});
 	}
 

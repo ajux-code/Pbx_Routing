@@ -633,9 +633,15 @@
 .pbx-btn-mute,
 .pbx-btn-hold {
     background: var(--pbx-bg);
-    color: var(--pbx-text);
+    color: var(--pbx-text) !important;
     border: 2px solid var(--pbx-border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.pbx-btn-mute svg,
+.pbx-btn-hold svg {
+    fill: var(--pbx-text) !important;
+    color: var(--pbx-text) !important;
 }
 
 .pbx-btn-mute:hover,
@@ -676,21 +682,34 @@
    Call State Transitions
    ============================================ */
 
-.pbx-webrtc-wrapper[data-state="incoming"] .pbx-webrtc-sdk-container {
-    display: none;
+/* Incoming call - hide SDK dialer completely */
+.pbx-webrtc-wrapper[data-state="incoming"] .pbx-webrtc-sdk-container,
+.pbx-webrtc-wrapper[data-state="incoming"] #pbx-webrtc-container {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
 
 .pbx-webrtc-wrapper[data-state="incoming"] .pbx-incoming-call-ui {
-    display: block;
+    display: block !important;
 }
 
+/* Active call - hide incoming UI */
 .pbx-webrtc-wrapper[data-state="active"] .pbx-incoming-call-ui {
-    display: none;
+    display: none !important;
 }
 
+/* Active call - hide SDK dialer */
+.pbx-webrtc-wrapper[data-state="active"] .pbx-webrtc-sdk-container,
+.pbx-webrtc-wrapper[data-state="active"] #pbx-webrtc-container {
+    display: none !important;
+}
+
+/* Idle/Ended - hide call UIs */
 .pbx-webrtc-wrapper[data-state="idle"] .pbx-incoming-call-ui,
 .pbx-webrtc-wrapper[data-state="ended"] .pbx-incoming-call-ui {
-    display: none;
+    display: none !important;
 }
 
 /* ============================================
@@ -724,8 +743,16 @@
 .pbx-webrtc-sdk-container button[title*="Video" i],
 .pbx-webrtc-sdk-container [data-action="video"],
 .pbx-webrtc-sdk-container .video-call-btn,
-.pbx-webrtc-sdk-container .video-btn {
+.pbx-webrtc-sdk-container .video-btn,
+#pbx-webrtc-container [class*="video"],
+#pbx-webrtc-container button:nth-child(2),
+.ys-webrtc-sdk-ui button[class*="video"],
+.ys-webrtc-sdk-ui [class*="video"] {
     display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
 
 /* Improve SDK dialer container styling */
