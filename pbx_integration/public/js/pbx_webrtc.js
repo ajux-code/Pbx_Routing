@@ -934,7 +934,7 @@ pbx_integration.WebRTC = class WebRTC {
 			'incoming', 'invite', 'call', 'session', 'incomingCall',
 			'incomingcall', 'ring', 'answer', 'answered', 'accept',
 			'startSession', 'newSession', 'registrationFailed', 'registered',
-			'unregistered', 'message', 'notify'
+			'unregistered', 'message', 'notify', 'sessionEnded', 'callEnded'
 		];
 
 		phoneEvents.forEach(evt => {
@@ -955,6 +955,21 @@ pbx_integration.WebRTC = class WebRTC {
 							console.log("SDK call ID received after realtime notification");
 						}
 					}
+				}
+
+				// startSession event - this happens when call becomes active
+				// IMPORTANT: Update our stored references with the active session info
+				if (evt === 'startSession' && data) {
+					console.log("startSession event - updating call references");
+					if (data.callId) this.currentCallId = data.callId;
+					if (data.session) this.currentSession = data.session;
+					console.log("Updated - callId:", this.currentCallId, "session:", this.currentSession);
+				}
+
+				// Call ended events from SDK
+				if (evt === 'sessionEnded' || evt === 'callEnded') {
+					console.log("SDK reports call ended");
+					this.setCallState('ended');
 				}
 			});
 		});
@@ -991,6 +1006,75 @@ pbx_integration.WebRTC = class WebRTC {
 				}, intervalMs);
 			}
 		});
+	}
+
+	/**
+	 * Try to refresh current call info from SDK
+	 * The SDK might have updated session references after answer
+	 */
+	async refreshCurrentCall() {
+		if (!this.phone) return;
+
+		console.log("Refreshing current call info from SDK...");
+
+		// Try to get current/active calls from SDK
+		const methodsToTry = [
+			'getCurrentCall', 'getActiveCall', 'getCurrentSession',
+			'getCurrentCalls', 'getActiveCalls', 'getSessions'
+		];
+
+		for (const method of methodsToTry) {
+			if (typeof this.phone[method] === 'function') {
+				try {
+					const result = this.phone[method]();
+					console.log(`phone.${method}() result:`, result);
+					if (result) {
+						if (Array.isArray(result) && result.length > 0) {
+							const call = result[0];
+							if (call.callId) this.currentCallId = call.callId;
+							if (call.session) this.currentSession = call.session;
+							if (call.id) this.currentCallId = call.id;
+							console.log("Updated call info from", method);
+							return;
+						} else if (typeof result === 'object' && result.callId) {
+							this.currentCallId = result.callId;
+							if (result.session) this.currentSession = result.session;
+							console.log("Updated call info from", method);
+							return;
+						}
+					}
+				} catch (e) {
+					console.log(`phone.${method}() failed:`, e.message);
+				}
+			}
+		}
+
+		// Also check phone properties
+		const propsToCheck = ['currentCall', 'activeCall', 'currentSession', 'session'];
+		for (const prop of propsToCheck) {
+			if (this.phone[prop]) {
+				console.log(`phone.${prop}:`, this.phone[prop]);
+				const call = this.phone[prop];
+				if (call.callId) this.currentCallId = call.callId;
+				if (call.session) this.currentSession = call.session;
+				if (call.id) this.currentCallId = call.id;
+				return;
+			}
+		}
+
+		// Try to find call in SDK's internal state (inspect phone object)
+		if (this.phone._calls || this.phone.calls) {
+			const calls = this.phone._calls || this.phone.calls;
+			console.log("Found phone._calls or phone.calls:", calls);
+			if (typeof calls === 'object') {
+				const callIds = Object.keys(calls);
+				if (callIds.length > 0) {
+					this.currentCallId = callIds[0];
+					this.currentSession = calls[callIds[0]];
+					console.log("Updated call from internal _calls:", this.currentCallId);
+				}
+			}
+		}
 	}
 
 	/**
@@ -1227,6 +1311,11 @@ pbx_integration.WebRTC = class WebRTC {
 
 		let success = false;
 
+		// First, try to get a fresh session/callId from the SDK
+		// The SDK might have updated the session reference after answer
+		await this.refreshCurrentCall();
+		console.log("After refresh - callId:", this.currentCallId, "session:", this.currentSession);
+
 		// Try multiple approaches to hangup
 
 		// Approach 1: Use phone.hangup() without args first (SDK knows active call)
@@ -1290,7 +1379,32 @@ pbx_integration.WebRTC = class WebRTC {
 			}
 		}
 
-		// Approach 6: Force end state if all else fails
+		// Approach 6: Try to click SDK's own hangup button
+		if (!success) {
+			console.log("Trying to find and click SDK hangup button...");
+			const sdkHangupSelectors = [
+				'.ys-webrtc-sdk-ui button[title*="hangup" i]',
+				'.ys-webrtc-sdk-ui button[title*="end" i]',
+				'.ys-webrtc-sdk-ui .hangup-btn',
+				'.ys-webrtc-sdk-ui .end-call-btn',
+				'.ys-webrtc-sdk-ui [class*="hangup"]',
+				'.ys-webrtc-sdk-ui [class*="end-call"]',
+				'button.hangup', 'button.end-call',
+				'[data-action="hangup"]', '[data-action="end"]'
+			];
+
+			for (const selector of sdkHangupSelectors) {
+				const btn = document.querySelector(selector);
+				if (btn) {
+					console.log("Found SDK hangup button:", selector);
+					btn.click();
+					success = true;
+					break;
+				}
+			}
+		}
+
+		// Approach 7: Force end state if all else fails
 		if (!success) {
 			console.warn("All hangup approaches failed - forcing state to ended");
 			// Force the UI to ended state even if SDK call is stuck
