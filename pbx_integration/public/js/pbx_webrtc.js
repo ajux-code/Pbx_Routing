@@ -547,9 +547,9 @@ pbx_integration.WebRTC = class WebRTC {
 				autoAnswer: false,
 				callWaiting: true,
 
-				// Let the SDK handle incoming component - we'll hide it with CSS
-				// Setting hiddenIncomingComponent: true may prevent events from firing
-				hiddenIncomingComponent: false,
+				// Hide SDK's incoming call popup - we use our own custom UI
+				// Events still fire via Frappe realtime and phone.on listeners
+				hiddenIncomingComponent: true,
 
 				// Show dial panel
 				hiddenDialPanelComponent: false,

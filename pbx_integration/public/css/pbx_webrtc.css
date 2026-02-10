@@ -524,23 +524,18 @@
    We use our own custom UI instead
    ============================================ */
 
-/* Yeastar SDK incoming call popup - hide it */
+/* Only hide SDK INCOMING call popups - be specific to avoid hiding active call modal */
 .ys-webrtc-sdk-ui-incoming-call,
 .ys-webrtc-incoming,
 .ys-incoming-call,
 .linkus-incoming-call,
-.ys-webrtc-sdk-ui__incoming,
-[class*="ys-webrtc"][class*="incoming"],
-[class*="linkus"][class*="incoming"] {
+.ys-webrtc-sdk-ui__incoming {
     display: none !important;
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
 }
 
-/* Also hide any SDK modal/popup that appears outside our container */
-body > .ys-webrtc-sdk-ui-modal,
-body > [class*="ys-webrtc"][class*="modal"],
-body > [class*="ys-webrtc"][class*="popup"] {
-    display: none !important;
-}
+/* NOTE: We do NOT hide general SDK modals/popups anymore
+   because the SDK uses those for the active call window.
+   The active call modal needs to be visible for call controls to work. */
