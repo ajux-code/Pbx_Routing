@@ -486,6 +486,91 @@
     display: block;
 }
 
+.pbx-active-call-info {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.pbx-active-caller {
+    margin-top: 8px;
+}
+
+.pbx-active-caller .pbx-caller-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--pbx-text);
+}
+
+.pbx-active-caller .pbx-caller-number {
+    font-size: 13px;
+    color: var(--pbx-text-muted);
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+.pbx-active-call-actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+}
+
+.pbx-active-call-actions button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    color: white;
+}
+
+.pbx-active-call-actions button svg {
+    width: 22px;
+    height: 22px;
+}
+
+.pbx-btn-hangup {
+    background: linear-gradient(135deg, var(--pbx-danger) 0%, var(--pbx-danger-dark) 100%);
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.pbx-btn-hangup:hover {
+    transform: scale(1.1);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.5);
+}
+
+.pbx-btn-hangup:active {
+    transform: scale(0.95);
+}
+
+.pbx-btn-mute,
+.pbx-btn-hold {
+    background: var(--pbx-bg);
+    color: var(--pbx-text);
+    border: 2px solid var(--pbx-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pbx-btn-mute:hover,
+.pbx-btn-hold:hover {
+    background: var(--pbx-bg-secondary);
+    transform: scale(1.05);
+}
+
+.pbx-btn-mute.active,
+.pbx-btn-hold.active {
+    background: var(--pbx-primary);
+    color: white;
+    border-color: var(--pbx-primary);
+}
+
+.pbx-btn-mute.active:hover,
+.pbx-btn-hold.active:hover {
+    background: var(--pbx-primary-dark);
+}
+
 .pbx-call-timer {
     text-align: center;
     font-size: 24px;

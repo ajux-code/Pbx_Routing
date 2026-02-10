@@ -28,6 +28,7 @@ pbx_integration.WebRTC = class WebRTC {
 		this.callTimer = null;
 		this.callDuration = 0;
 		this.incomingCallUI = null;
+		this.activeCallUI = null;
 	}
 
 	/**
@@ -234,6 +235,37 @@ pbx_integration.WebRTC = class WebRTC {
 			</div>
 		`;
 
+		// Active call UI (hidden by default)
+		this.activeCallUI = document.createElement("div");
+		this.activeCallUI.className = "pbx-active-call-ui";
+		this.activeCallUI.style.display = "none";
+		this.activeCallUI.innerHTML = `
+			<div class="pbx-active-call-info">
+				<div class="pbx-call-timer">00:00</div>
+				<div class="pbx-active-caller">
+					<div class="pbx-caller-name">On Call</div>
+					<div class="pbx-caller-number"></div>
+				</div>
+			</div>
+			<div class="pbx-active-call-actions">
+				<button class="pbx-btn-mute" title="Mute">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+					</svg>
+				</button>
+				<button class="pbx-btn-hangup" title="Hang Up">
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+					</svg>
+				</button>
+				<button class="pbx-btn-hold" title="Hold">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+					</svg>
+				</button>
+			</div>
+		`;
+
 		// SDK container
 		this.container = document.createElement("div");
 		this.container.id = "pbx-webrtc-container";
@@ -242,6 +274,7 @@ pbx_integration.WebRTC = class WebRTC {
 		// Assemble
 		this.wrapper.appendChild(header);
 		this.wrapper.appendChild(this.incomingCallUI);
+		this.wrapper.appendChild(this.activeCallUI);
 		this.wrapper.appendChild(this.container);
 		document.body.appendChild(this.wrapper);
 
@@ -249,6 +282,7 @@ pbx_integration.WebRTC = class WebRTC {
 		this.setupDraggable(header);
 		this.setupHeaderControls(header);
 		this.setupIncomingCallButtons();
+		this.setupActiveCallButtons();
 		this.loadPosition();
 	}
 
@@ -271,6 +305,32 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
+	 * Setup active call button handlers
+	 */
+	setupActiveCallButtons() {
+		const hangupBtn = this.activeCallUI.querySelector(".pbx-btn-hangup");
+		const muteBtn = this.activeCallUI.querySelector(".pbx-btn-mute");
+		const holdBtn = this.activeCallUI.querySelector(".pbx-btn-hold");
+
+		hangupBtn.addEventListener("click", async () => {
+			console.log("Hangup button clicked");
+			await this.hangup();
+		});
+
+		muteBtn.addEventListener("click", () => {
+			console.log("Mute button clicked");
+			this.toggleMute();
+			muteBtn.classList.toggle("active");
+		});
+
+		holdBtn.addEventListener("click", () => {
+			console.log("Hold button clicked");
+			this.toggleHold();
+			holdBtn.classList.toggle("active");
+		});
+	}
+
+	/**
 	 * Set call state and update UI accordingly
 	 */
 	setCallState(state, callInfo = null) {
@@ -286,6 +346,7 @@ pbx_integration.WebRTC = class WebRTC {
 		switch (state) {
 			case 'idle':
 				this.hideIncomingCallUI();
+				this.hideActiveCallUI();
 				this.stopCallTimer();
 				// Clear all call references
 				this.currentCall = null;
@@ -297,6 +358,7 @@ pbx_integration.WebRTC = class WebRTC {
 
 			case 'incoming':
 				this.showIncomingCallUI(callInfo);
+				this.hideActiveCallUI();
 				if (headerText) headerText.textContent = "Incoming Call";
 				if (this.wrapper) {
 					this.wrapper.classList.add("incoming");
@@ -309,6 +371,7 @@ pbx_integration.WebRTC = class WebRTC {
 
 			case 'active':
 				this.hideIncomingCallUI();
+				this.showActiveCallUI(callInfo);
 				this.startCallTimer();
 				if (headerText) headerText.textContent = "On Call";
 				if (this.wrapper) {
@@ -319,6 +382,7 @@ pbx_integration.WebRTC = class WebRTC {
 
 			case 'ended':
 				this.hideIncomingCallUI();
+				this.hideActiveCallUI();
 				this.stopCallTimer();
 				// Clear call references when ended
 				this.currentCall = null;
@@ -365,6 +429,34 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
+	 * Show active call UI with call controls
+	 */
+	showActiveCallUI(callInfo) {
+		if (!this.activeCallUI) return;
+
+		const callerName = this.activeCallUI.querySelector(".pbx-caller-name");
+		const callerNumber = this.activeCallUI.querySelector(".pbx-caller-number");
+
+		if (callerName) {
+			callerName.textContent = callInfo?.callerName || callInfo?.name || "On Call";
+		}
+		if (callerNumber) {
+			callerNumber.textContent = callInfo?.callerNumber || callInfo?.number || "";
+		}
+
+		this.activeCallUI.style.display = "block";
+	}
+
+	/**
+	 * Hide active call UI
+	 */
+	hideActiveCallUI() {
+		if (this.activeCallUI) {
+			this.activeCallUI.style.display = "none";
+		}
+	}
+
+	/**
 	 * Start call duration timer
 	 */
 	startCallTimer() {
@@ -372,13 +464,18 @@ pbx_integration.WebRTC = class WebRTC {
 		this.stopCallTimer();
 
 		const headerText = this.wrapper?.querySelector(".pbx-header-text");
+		const timerDisplay = this.activeCallUI?.querySelector(".pbx-call-timer");
 
 		this.callTimer = setInterval(() => {
 			this.callDuration++;
 			const mins = Math.floor(this.callDuration / 60).toString().padStart(2, '0');
 			const secs = (this.callDuration % 60).toString().padStart(2, '0');
+			const timeStr = `${mins}:${secs}`;
 			if (headerText) {
-				headerText.textContent = `${mins}:${secs}`;
+				headerText.textContent = timeStr;
+			}
+			if (timerDisplay) {
+				timerDisplay.textContent = timeStr;
 			}
 		}, 1000);
 	}
@@ -781,6 +878,14 @@ pbx_integration.WebRTC = class WebRTC {
 
 					// Also listen to session events if available
 					if (session && typeof session.on === 'function') {
+						const endCall = (reason) => {
+							console.log(`[session.on] Call ended: ${reason}`);
+							this.currentCall = null;
+							this.currentSession = null;
+							this.currentCallId = null;
+							this.setCallState('ended');
+						};
+
 						session.on('accepted', () => {
 							console.log("[session.on] accepted");
 							this.setCallState('active');
@@ -789,20 +894,11 @@ pbx_integration.WebRTC = class WebRTC {
 							console.log("[session.on] confirmed");
 							this.setCallState('active');
 						});
-						session.on('ended', (endData) => {
-							console.log("[session.on] ended:", endData);
-							this.currentCall = null;
-							this.currentSession = null;
-							this.currentCallId = null;
-							this.setCallState('ended');
-						});
-						session.on('failed', (failData) => {
-							console.log("[session.on] failed:", failData);
-							this.currentCall = null;
-							this.currentSession = null;
-							this.currentCallId = null;
-							this.setCallState('ended');
-						});
+						// Listen for all possible end events
+						session.on('ended', (data) => endCall('ended'));
+						session.on('terminated', (data) => endCall('terminated'));
+						session.on('failed', (data) => endCall('failed'));
+						session.on('bye', (data) => endCall('bye'));
 					}
 				}
 			}
@@ -1084,6 +1180,7 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 		this.container = null;
 		this.incomingCallUI = null;
+		this.activeCallUI = null;
 
 		frappe.show_alert({
 			message: "WebRTC disconnected. Will reconnect on next call.",
@@ -1108,6 +1205,7 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 		this.container = null;
 		this.incomingCallUI = null;
+		this.activeCallUI = null;
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;
