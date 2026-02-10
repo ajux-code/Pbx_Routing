@@ -209,26 +209,26 @@ pbx_integration.WebRTC = class WebRTC {
 		this.incomingCallUI.className = "pbx-incoming-call-ui";
 		this.incomingCallUI.style.display = "none";
 		this.incomingCallUI.innerHTML = `
+			<div class="pbx-incoming-badge">Incoming Call</div>
 			<div class="pbx-incoming-caller">
 				<div class="pbx-caller-avatar">
-					<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+					<svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
 						<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
 					</svg>
 				</div>
 				<div class="pbx-caller-info">
 					<div class="pbx-caller-name">Unknown</div>
 					<div class="pbx-caller-number"></div>
-					<div class="pbx-call-status-text">Incoming call...</div>
 				</div>
 			</div>
 			<div class="pbx-incoming-actions">
-				<button class="pbx-btn-reject" title="Reject">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+				<button class="pbx-btn-reject" title="Decline" data-label="Decline">
+					<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
 						<path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
 					</svg>
 				</button>
-				<button class="pbx-btn-answer" title="Answer">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+				<button class="pbx-btn-answer" title="Answer" data-label="Answer">
+					<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
 						<path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
 					</svg>
 				</button>
@@ -241,6 +241,7 @@ pbx_integration.WebRTC = class WebRTC {
 		this.activeCallUI.style.display = "none";
 		this.activeCallUI.innerHTML = `
 			<div class="pbx-active-call-info">
+				<div class="pbx-connected-badge">Connected</div>
 				<div class="pbx-call-timer">00:00</div>
 				<div class="pbx-active-caller">
 					<div class="pbx-caller-name">On Call</div>
@@ -248,18 +249,18 @@ pbx_integration.WebRTC = class WebRTC {
 				</div>
 			</div>
 			<div class="pbx-active-call-actions">
-				<button class="pbx-btn-mute" title="Mute">
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+				<button class="pbx-btn-mute" title="Mute" data-label="Mute">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
 						<path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
 					</svg>
 				</button>
-				<button class="pbx-btn-hangup" title="Hang Up">
+				<button class="pbx-btn-hangup" title="End Call" data-label="End">
 					<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
 						<path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
 					</svg>
 				</button>
-				<button class="pbx-btn-hold" title="Hold">
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+				<button class="pbx-btn-hold" title="Hold" data-label="Hold">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
 						<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
 					</svg>
 				</button>
