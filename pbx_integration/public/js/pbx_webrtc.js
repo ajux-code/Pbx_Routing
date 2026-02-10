@@ -29,6 +29,10 @@ pbx_integration.WebRTC = class WebRTC {
 		this.callDuration = 0;
 		this.incomingCallUI = null;
 		this.activeCallUI = null;
+
+		// Call control states
+		this.isMuted = false;
+		this.isOnHold = false;
 	}
 
 	/**
@@ -353,6 +357,9 @@ pbx_integration.WebRTC = class WebRTC {
 				this.currentCall = null;
 				this.currentSession = null;
 				this.currentCallId = null;
+				// Reset call control states
+				this.isMuted = false;
+				this.isOnHold = false;
 				if (headerText) headerText.textContent = "Phone";
 				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
 				// Show SDK container (dialer) when idle
@@ -1388,6 +1395,43 @@ pbx_integration.WebRTC = class WebRTC {
 		await this.refreshCurrentCall();
 		console.log("After refresh - callId:", this.currentCallId, "session:", this.currentSession);
 
+		// If still no callId, try to find any active call in the SDK
+		if (!this.currentCallId && this.phone) {
+			console.log("No callId found, searching for any active call...");
+
+			// Try getSessions which returns a Map
+			if (typeof this.phone.getSessions === 'function') {
+				try {
+					const sessions = this.phone.getSessions();
+					console.log("getSessions result:", sessions);
+					if (sessions && sessions.size > 0) {
+						// Get the first session's key (which is the callId)
+						const firstKey = sessions.keys().next().value;
+						if (firstKey) {
+							this.currentCallId = firstKey;
+							this.currentSession = sessions.get(firstKey);
+							console.log("Found callId from getSessions:", this.currentCallId);
+						}
+					}
+				} catch (e) {
+					console.log("getSessions error:", e);
+				}
+			}
+
+			// Also try checking phone._calls or phone.calls
+			if (!this.currentCallId) {
+				const callsObj = this.phone._calls || this.phone.calls;
+				if (callsObj && typeof callsObj === 'object') {
+					const callIds = Object.keys(callsObj);
+					if (callIds.length > 0) {
+						this.currentCallId = callIds[0];
+						this.currentSession = callsObj[callIds[0]];
+						console.log("Found callId from _calls:", this.currentCallId);
+					}
+				}
+			}
+		}
+
 		// Try multiple approaches to hangup
 
 		// Approach 1: Use phone.hangup(callId) - THIS IS THE ONE THAT WORKS
@@ -1515,34 +1559,72 @@ pbx_integration.WebRTC = class WebRTC {
 	toggleMute() {
 		if (!this.phone) return;
 
+		console.log("Toggle mute, current state:", this.isMuted);
+
 		try {
-			// Try with callId first
-			if (this.currentCallId && typeof this.phone.mute === 'function') {
-				this.phone.mute(this.currentCallId);
-			} else if (typeof this.phone.mute === 'function') {
-				this.phone.mute();
-			} else if (this.currentSession && typeof this.currentSession.mute === 'function') {
-				this.currentSession.mute();
+			if (this.isMuted) {
+				// Currently muted, unmute
+				if (this.currentCallId && typeof this.phone.unmute === 'function') {
+					this.phone.unmute(this.currentCallId);
+				} else if (typeof this.phone.unmute === 'function') {
+					this.phone.unmute();
+				} else if (this.currentSession && typeof this.currentSession.unmute === 'function') {
+					this.currentSession.unmute();
+				}
+				this.isMuted = false;
+			} else {
+				// Currently unmuted, mute
+				if (this.currentCallId && typeof this.phone.mute === 'function') {
+					this.phone.mute(this.currentCallId);
+				} else if (typeof this.phone.mute === 'function') {
+					this.phone.mute();
+				} else if (this.currentSession && typeof this.currentSession.mute === 'function') {
+					this.currentSession.mute();
+				}
+				this.isMuted = true;
 			}
+			console.log("Mute toggled, new state:", this.isMuted);
 		} catch (error) {
-			console.error("Mute failed:", error);
+			console.error("Mute toggle failed:", error);
 		}
 	}
 
 	toggleHold() {
 		if (!this.phone) return;
 
+		console.log("Toggle hold, current state:", this.isOnHold);
+
 		try {
-			// Try with callId first
-			if (this.currentCallId && typeof this.phone.hold === 'function') {
-				this.phone.hold(this.currentCallId);
-			} else if (typeof this.phone.hold === 'function') {
-				this.phone.hold();
-			} else if (this.currentSession && typeof this.currentSession.hold === 'function') {
-				this.currentSession.hold();
+			if (this.isOnHold) {
+				// Currently on hold, unhold
+				if (this.currentCallId && typeof this.phone.unhold === 'function') {
+					this.phone.unhold(this.currentCallId);
+				} else if (typeof this.phone.unhold === 'function') {
+					this.phone.unhold();
+				} else if (this.currentSession && typeof this.currentSession.unhold === 'function') {
+					this.currentSession.unhold();
+				}
+				// Also try 'resume' as an alternative to unhold
+				else if (this.currentCallId && typeof this.phone.resume === 'function') {
+					this.phone.resume(this.currentCallId);
+				} else if (typeof this.phone.resume === 'function') {
+					this.phone.resume();
+				}
+				this.isOnHold = false;
+			} else {
+				// Currently not on hold, put on hold
+				if (this.currentCallId && typeof this.phone.hold === 'function') {
+					this.phone.hold(this.currentCallId);
+				} else if (typeof this.phone.hold === 'function') {
+					this.phone.hold();
+				} else if (this.currentSession && typeof this.currentSession.hold === 'function') {
+					this.currentSession.hold();
+				}
+				this.isOnHold = true;
 			}
+			console.log("Hold toggled, new state:", this.isOnHold);
 		} catch (error) {
-			console.error("Hold failed:", error);
+			console.error("Hold toggle failed:", error);
 		}
 	}
 

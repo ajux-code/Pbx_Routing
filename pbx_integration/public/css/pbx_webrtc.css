@@ -582,6 +582,8 @@
     justify-content: center;
     gap: 20px;
     padding-top: 4px;
+    padding-bottom: 28px;  /* Space for button labels + extra margin */
+    margin-bottom: 8px;
 }
 
 .pbx-active-call-actions button {
@@ -745,14 +747,19 @@
 .pbx-webrtc-sdk-container .video-call-btn,
 .pbx-webrtc-sdk-container .video-btn,
 #pbx-webrtc-container [class*="video"],
-#pbx-webrtc-container button:nth-child(2),
 .ys-webrtc-sdk-ui button[class*="video"],
-.ys-webrtc-sdk-ui [class*="video"] {
+.ys-webrtc-sdk-ui [class*="video"],
+/* Target the second button in SDK which is usually video */
+.pbx-webrtc-sdk-container > div > button:last-child,
+#pbx-webrtc-container > div > button:last-child {
     display: none !important;
     visibility: hidden !important;
     width: 0 !important;
     height: 0 !important;
     overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
 }
 
 /* Improve SDK dialer container styling */
@@ -760,40 +767,53 @@
     padding: 16px;
 }
 
+/* SDK internal layout - input and buttons in a row */
+.pbx-webrtc-sdk-container > div,
+#pbx-webrtc-container > div {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 12px !important;
+    position: relative !important;
+}
+
 /* Style the SDK input field */
 .pbx-webrtc-sdk-container input[type="text"],
 .pbx-webrtc-sdk-container input[type="tel"],
 .pbx-webrtc-sdk-container input[type="number"],
-.pbx-webrtc-sdk-container input {
-    width: 100%;
-    padding: 12px 16px;
-    border: 2px solid var(--pbx-border);
-    border-radius: var(--pbx-radius-sm);
-    font-size: 15px;
-    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-    background: var(--pbx-bg);
-    color: var(--pbx-text);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    outline: none;
-    letter-spacing: 0.03em;
+.pbx-webrtc-sdk-container input,
+#pbx-webrtc-container input {
+    flex: 1 !important;
+    min-width: 0 !important;
+    padding: 12px 16px !important;
+    border: 2px solid var(--pbx-border) !important;
+    border-radius: var(--pbx-radius-sm) !important;
+    font-size: 15px !important;
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace !important;
+    background: var(--pbx-bg) !important;
+    color: var(--pbx-text) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    outline: none !important;
+    letter-spacing: 0.03em !important;
+    position: static !important;
 }
 
-.pbx-webrtc-sdk-container input:focus {
-    border-color: var(--pbx-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+.pbx-webrtc-sdk-container input:focus,
+#pbx-webrtc-container input:focus {
+    border-color: var(--pbx-primary) !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
 }
 
-.pbx-webrtc-sdk-container input::placeholder {
-    color: var(--pbx-text-muted);
-    opacity: 0.7;
+.pbx-webrtc-sdk-container input::placeholder,
+#pbx-webrtc-container input::placeholder {
+    color: var(--pbx-text-muted) !important;
+    opacity: 0.7 !important;
 }
 
-/* Style SDK call button */
-.pbx-webrtc-sdk-container button[class*="call"],
-.pbx-webrtc-sdk-container button[title*="call" i],
-.pbx-webrtc-sdk-container button[title*="Call" i],
-.pbx-webrtc-sdk-container .call-btn,
-.pbx-webrtc-sdk-container [data-action="call"] {
+/* Style SDK call button - target first button (audio call) */
+.pbx-webrtc-sdk-container > div > button:first-of-type,
+#pbx-webrtc-container > div > button:first-of-type {
+    flex-shrink: 0 !important;
     background: linear-gradient(135deg, var(--pbx-success) 0%, var(--pbx-success-dark) 100%) !important;
     border: none !important;
     border-radius: 50% !important;
@@ -808,22 +828,13 @@
     transition: transform 0.2s ease, box-shadow 0.2s ease !important;
     box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4) !important;
     color: white !important;
+    position: static !important;
 }
 
-.pbx-webrtc-sdk-container button[class*="call"]:hover,
-.pbx-webrtc-sdk-container button[title*="call" i]:hover,
-.pbx-webrtc-sdk-container button[title*="Call" i]:hover,
-.pbx-webrtc-sdk-container .call-btn:hover,
-.pbx-webrtc-sdk-container [data-action="call"]:hover {
+.pbx-webrtc-sdk-container > div > button:first-of-type:hover,
+#pbx-webrtc-container > div > button:first-of-type:hover {
     transform: scale(1.08) !important;
     box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5) !important;
-}
-
-/* SDK action buttons row styling */
-.pbx-webrtc-sdk-container > div {
-    display: flex;
-    align-items: center;
-    gap: 12px;
 }
 
 /* Add bottom padding for breathing room */
