@@ -1,10 +1,11 @@
 /**
  * PBX WebRTC Integration using Yeastar Linkus SDK
  *
- * Enables browser-based calling with:
- * - Incoming/outgoing calls via WebRTC
- * - Microphone/speaker handling
- * - Call UI controls
+ * Single persistent widget with state-aware UI:
+ * - Idle: Compact dialer
+ * - Incoming: Expanded with answer/reject buttons
+ * - Active: Call controls (mute, hold, hangup, timer)
+ * - Ended: Brief summary, then collapse to idle
  */
 
 frappe.provide("pbx_integration");
@@ -12,22 +13,25 @@ frappe.provide("pbx_integration");
 pbx_integration.WebRTC = class WebRTC {
 	constructor() {
 		this.initialized = false;
-		this.phone = null;      // Linkus SDK phone operator
-		this.pbx = null;        // Linkus SDK PBX operator
+		this.phone = null;
+		this.pbx = null;
 		this.currentCall = null;
-		this.wrapper = null;    // Outer draggable wrapper
-		this.container = null;  // SDK container
+		this.wrapper = null;
+		this.container = null;
 		this.destroy = null;
 		this.on = null;
 
-		// Don't auto-init - wait for explicit call
+		// Call state management
+		this.callState = 'idle'; // idle, incoming, active, ended
+		this.callTimer = null;
+		this.callDuration = 0;
+		this.incomingCallUI = null;
 	}
 
 	/**
 	 * Initialize the Linkus SDK WebRTC client
 	 */
 	async init() {
-		// If already initialized AND phone exists, we're good
 		if (this.initialized && this.phone) {
 			console.log("WebRTC already initialized");
 			return true;
@@ -35,7 +39,7 @@ pbx_integration.WebRTC = class WebRTC {
 
 		console.log("Initializing WebRTC SDK...");
 
-		// Clean up any stale state before re-initializing
+		// Clean up any stale state
 		if (this.destroy) {
 			try {
 				this.destroy();
@@ -53,15 +57,14 @@ pbx_integration.WebRTC = class WebRTC {
 		this.destroy = null;
 		this.on = null;
 		this.initialized = false;
+		this.callState = 'idle';
 
-		// Check microphone permission first
 		const hasMic = await this.requestMicrophonePermission();
 		if (!hasMic) {
 			return false;
 		}
 
 		try {
-			// 1. Get login signature from backend
 			const credentials = await this.getCredentials();
 			if (!credentials.success) {
 				frappe.show_alert({
@@ -71,10 +74,8 @@ pbx_integration.WebRTC = class WebRTC {
 				return false;
 			}
 
-			// 2. Create container for SDK UI
 			this.createContainer();
 
-			// 3. Initialize Linkus SDK
 			const result = await this.initSDK(credentials);
 			if (!result) {
 				return false;
@@ -100,14 +101,9 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 	}
 
-	/**
-	 * Request microphone permission
-	 */
 	async requestMicrophonePermission() {
 		try {
-			// Check if browser supports permissions API
 			if (!navigator.permissions) {
-				// Fallback for browsers without permissions API (Safari)
 				try {
 					const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 					stream.getTracks().forEach(track => track.stop());
@@ -123,7 +119,6 @@ pbx_integration.WebRTC = class WebRTC {
 				}
 			}
 
-			// Check current permission state
 			const result = await navigator.permissions.query({ name: 'microphone' });
 
 			if (result.state === 'granted') {
@@ -139,9 +134,8 @@ pbx_integration.WebRTC = class WebRTC {
 				return false;
 			}
 
-			// Prompt for permission
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-			stream.getTracks().forEach(track => track.stop()); // Release immediately
+			stream.getTracks().forEach(track => track.stop());
 			return true;
 
 		} catch (error) {
@@ -155,9 +149,6 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 	}
 
-	/**
-	 * Get WebRTC credentials from backend
-	 */
 	async getCredentials() {
 		const result = await frappe.call({
 			method: "pbx_integration.api.call.get_webrtc_signature"
@@ -166,21 +157,20 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
-	 * Create DOM container for SDK UI with custom draggable wrapper
+	 * Create DOM container with custom header and incoming call UI area
 	 */
 	createContainer() {
-		// Remove existing wrapper if present
 		const existingWrapper = document.getElementById("pbx-webrtc-wrapper");
 		if (existingWrapper) {
 			existingWrapper.remove();
 		}
 
-		// Create outer wrapper for dragging
 		this.wrapper = document.createElement("div");
 		this.wrapper.id = "pbx-webrtc-wrapper";
 		this.wrapper.className = "pbx-webrtc-wrapper";
+		this.wrapper.dataset.state = "idle";
 
-		// Create custom header with drag handle
+		// Header
 		const header = document.createElement("div");
 		header.className = "pbx-webrtc-header";
 		header.innerHTML = `
@@ -194,7 +184,7 @@ pbx_integration.WebRTC = class WebRTC {
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
 					<path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
 				</svg>
-				<span>Phone</span>
+				<span class="pbx-header-text">Phone</span>
 			</div>
 			<div class="pbx-header-actions">
 				<button class="pbx-btn-minimize" title="Minimize">
@@ -210,35 +200,193 @@ pbx_integration.WebRTC = class WebRTC {
 			</div>
 		`;
 
-		// Create SDK container
+		// Custom incoming call UI (hidden by default)
+		this.incomingCallUI = document.createElement("div");
+		this.incomingCallUI.className = "pbx-incoming-call-ui";
+		this.incomingCallUI.style.display = "none";
+		this.incomingCallUI.innerHTML = `
+			<div class="pbx-incoming-caller">
+				<div class="pbx-caller-avatar">
+					<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+					</svg>
+				</div>
+				<div class="pbx-caller-info">
+					<div class="pbx-caller-name">Unknown</div>
+					<div class="pbx-caller-number"></div>
+					<div class="pbx-call-status-text">Incoming call...</div>
+				</div>
+			</div>
+			<div class="pbx-incoming-actions">
+				<button class="pbx-btn-reject" title="Reject">
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/>
+					</svg>
+				</button>
+				<button class="pbx-btn-answer" title="Answer">
+					<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+						<path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+					</svg>
+				</button>
+			</div>
+		`;
+
+		// SDK container
 		this.container = document.createElement("div");
 		this.container.id = "pbx-webrtc-container";
 		this.container.className = "pbx-webrtc-sdk-container";
 
 		// Assemble
 		this.wrapper.appendChild(header);
+		this.wrapper.appendChild(this.incomingCallUI);
 		this.wrapper.appendChild(this.container);
 		document.body.appendChild(this.wrapper);
 
-		// Setup dragging and controls
+		// Setup interactions
 		this.setupDraggable(header);
 		this.setupHeaderControls(header);
-
-		// Load saved position
+		this.setupIncomingCallButtons();
 		this.loadPosition();
 	}
 
 	/**
-	 * Setup draggable functionality
+	 * Setup incoming call button handlers
 	 */
+	setupIncomingCallButtons() {
+		const answerBtn = this.incomingCallUI.querySelector(".pbx-btn-answer");
+		const rejectBtn = this.incomingCallUI.querySelector(".pbx-btn-reject");
+
+		answerBtn.addEventListener("click", async () => {
+			console.log("Answer button clicked");
+			await this.answer();
+		});
+
+		rejectBtn.addEventListener("click", async () => {
+			console.log("Reject button clicked");
+			await this.hangup();
+		});
+	}
+
+	/**
+	 * Set call state and update UI accordingly
+	 */
+	setCallState(state, callInfo = null) {
+		console.log(`Call state: ${this.callState} -> ${state}`, callInfo);
+		this.callState = state;
+
+		if (this.wrapper) {
+			this.wrapper.dataset.state = state;
+		}
+
+		const headerText = this.wrapper?.querySelector(".pbx-header-text");
+
+		switch (state) {
+			case 'idle':
+				this.hideIncomingCallUI();
+				this.stopCallTimer();
+				if (headerText) headerText.textContent = "Phone";
+				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
+				break;
+
+			case 'incoming':
+				this.showIncomingCallUI(callInfo);
+				if (headerText) headerText.textContent = "Incoming Call";
+				if (this.wrapper) {
+					this.wrapper.classList.add("incoming");
+					this.wrapper.classList.remove("active", "minimized", "hidden");
+				}
+				// Show restore button if hidden
+				const restoreBtn = document.getElementById("pbx-restore-btn");
+				if (restoreBtn) restoreBtn.classList.add("hidden");
+				break;
+
+			case 'active':
+				this.hideIncomingCallUI();
+				this.startCallTimer();
+				if (headerText) headerText.textContent = "On Call";
+				if (this.wrapper) {
+					this.wrapper.classList.add("active");
+					this.wrapper.classList.remove("incoming");
+				}
+				break;
+
+			case 'ended':
+				this.hideIncomingCallUI();
+				this.stopCallTimer();
+				if (headerText) headerText.textContent = "Call Ended";
+				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
+				// Auto-return to idle after 2 seconds
+				setTimeout(() => {
+					if (this.callState === 'ended') {
+						this.setCallState('idle');
+					}
+				}, 2000);
+				break;
+		}
+	}
+
+	/**
+	 * Show custom incoming call UI
+	 */
+	showIncomingCallUI(callInfo) {
+		if (!this.incomingCallUI) return;
+
+		const callerName = this.incomingCallUI.querySelector(".pbx-caller-name");
+		const callerNumber = this.incomingCallUI.querySelector(".pbx-caller-number");
+
+		if (callerName) {
+			callerName.textContent = callInfo?.callerName || callInfo?.name || "Unknown Caller";
+		}
+		if (callerNumber) {
+			callerNumber.textContent = callInfo?.callerNumber || callInfo?.number || "";
+		}
+
+		this.incomingCallUI.style.display = "block";
+	}
+
+	/**
+	 * Hide custom incoming call UI
+	 */
+	hideIncomingCallUI() {
+		if (this.incomingCallUI) {
+			this.incomingCallUI.style.display = "none";
+		}
+	}
+
+	/**
+	 * Start call duration timer
+	 */
+	startCallTimer() {
+		this.callDuration = 0;
+		this.stopCallTimer();
+
+		const headerText = this.wrapper?.querySelector(".pbx-header-text");
+
+		this.callTimer = setInterval(() => {
+			this.callDuration++;
+			const mins = Math.floor(this.callDuration / 60).toString().padStart(2, '0');
+			const secs = (this.callDuration % 60).toString().padStart(2, '0');
+			if (headerText) {
+				headerText.textContent = `${mins}:${secs}`;
+			}
+		}, 1000);
+	}
+
+	/**
+	 * Stop call duration timer
+	 */
+	stopCallTimer() {
+		if (this.callTimer) {
+			clearInterval(this.callTimer);
+			this.callTimer = null;
+		}
+	}
+
 	setupDraggable(header) {
 		let isDragging = false;
 		let startX, startY, startLeft, startTop;
 
-		const dragHandle = header.querySelector(".pbx-header-drag-handle");
-
 		const onMouseDown = (e) => {
-			// Only drag from the header, not buttons
 			if (e.target.closest("button")) return;
 
 			isDragging = true;
@@ -264,7 +412,6 @@ pbx_integration.WebRTC = class WebRTC {
 			let newLeft = startLeft + deltaX;
 			let newTop = startTop + deltaY;
 
-			// Keep within viewport bounds
 			const wrapperRect = this.wrapper.getBoundingClientRect();
 			const maxLeft = window.innerWidth - wrapperRect.width;
 			const maxTop = window.innerHeight - wrapperRect.height;
@@ -283,14 +430,11 @@ pbx_integration.WebRTC = class WebRTC {
 			this.wrapper.classList.remove("dragging");
 			document.removeEventListener("mousemove", onMouseMove);
 			document.removeEventListener("mouseup", onMouseUp);
-
-			// Save position
 			this.savePosition();
 		};
 
 		header.addEventListener("mousedown", onMouseDown);
 
-		// Touch support for mobile
 		header.addEventListener("touchstart", (e) => {
 			if (e.target.closest("button")) return;
 			const touch = e.touches[0];
@@ -306,28 +450,25 @@ pbx_integration.WebRTC = class WebRTC {
 		document.addEventListener("touchend", onMouseUp);
 	}
 
-	/**
-	 * Setup header control buttons
-	 */
 	setupHeaderControls(header) {
 		const minimizeBtn = header.querySelector(".pbx-btn-minimize");
 		const closeBtn = header.querySelector(".pbx-btn-close");
 
 		minimizeBtn.addEventListener("click", () => {
+			// Don't minimize during incoming call
+			if (this.callState === 'incoming') return;
 			this.wrapper.classList.toggle("minimized");
 			this.savePosition();
 		});
 
 		closeBtn.addEventListener("click", () => {
+			// Don't close during incoming call
+			if (this.callState === 'incoming') return;
 			this.wrapper.classList.add("hidden");
-			// Show a floating button to restore
 			this.showRestoreButton();
 		});
 	}
 
-	/**
-	 * Show floating button to restore the phone widget
-	 */
 	showRestoreButton() {
 		let restoreBtn = document.getElementById("pbx-restore-btn");
 		if (!restoreBtn) {
@@ -348,12 +489,8 @@ pbx_integration.WebRTC = class WebRTC {
 		restoreBtn.classList.remove("hidden");
 	}
 
-	/**
-	 * Save widget position to localStorage
-	 */
 	savePosition() {
 		if (!this.wrapper) return;
-		const rect = this.wrapper.getBoundingClientRect();
 		const position = {
 			left: this.wrapper.style.left,
 			top: this.wrapper.style.top,
@@ -362,9 +499,6 @@ pbx_integration.WebRTC = class WebRTC {
 		localStorage.setItem("pbx_widget_position", JSON.stringify(position));
 	}
 
-	/**
-	 * Load saved widget position
-	 */
 	loadPosition() {
 		if (!this.wrapper) return;
 		const saved = localStorage.getItem("pbx_widget_position");
@@ -387,10 +521,9 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
-	 * Initialize Yeastar Linkus SDK
+	 * Initialize Yeastar Linkus SDK with hidden incoming component
 	 */
 	async initSDK(credentials) {
-		// Check if SDK is loaded
 		if (typeof window.YSWebRTCUI === "undefined") {
 			console.error("Linkus SDK not loaded");
 			frappe.show_alert({
@@ -406,14 +539,24 @@ pbx_integration.WebRTC = class WebRTC {
 				secret: credentials.secret,
 				pbxURL: credentials.pbx_url,
 
-				// Optional configuration
-				enableVideo: false,          // Audio only
-				autoAnswer: false,           // Don't auto-answer
-				callWaiting: true,           // Allow call waiting
+				// Configuration
+				enableVideo: false,
+				autoAnswer: false,
+				callWaiting: true,
 
-				// UI customization
-				hideHeader: false,
-				hideMinimize: false
+				// CRITICAL: Hide SDK's incoming call popup - we use our own
+				hiddenIncomingComponent: true,
+
+				// Hide dial panel too - we use the SDK's built-in one in container
+				hiddenDialPanelComponent: false,
+
+				// Session window positioning
+				sessionOption: {
+					sessionSetting: {
+						width: 300,
+						height: 400
+					}
+				}
 			});
 
 			this.phone = data.phone;
@@ -421,7 +564,7 @@ pbx_integration.WebRTC = class WebRTC {
 			this.destroy = data.destroy;
 			this.on = data.on;
 
-			console.log("Linkus SDK initialized successfully");
+			console.log("Linkus SDK initialized with hiddenIncomingComponent: true");
 			return true;
 
 		} catch (error) {
@@ -431,28 +574,40 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
-	 * Setup event listeners for call events
+	 * Setup event listeners for call state management
 	 */
 	setupEventListeners() {
 		if (!this.on) return;
 
-		// Incoming call
+		// Incoming call - show our custom UI
 		this.on("incoming", (callInfo) => {
-			console.log("Incoming call:", callInfo);
+			console.log("Incoming call event:", callInfo);
 			this.currentCall = callInfo;
+			this.setCallState('incoming', callInfo);
 			this.onIncomingCall(callInfo);
 		});
 
-		// Call connected
+		// Call connected/confirmed
 		this.on("connected", (callInfo) => {
-			console.log("Call connected:", callInfo);
+			console.log("Call connected event:", callInfo);
+			this.setCallState('active', callInfo);
 			this.onCallConnected(callInfo);
+		});
+
+		// Also listen for startSession which fires when call starts
+		this.on("startSession", (data) => {
+			console.log("startSession event:", data);
+			// For outbound calls, this marks the start
+			if (this.callState === 'idle') {
+				this.setCallState('active', data);
+			}
 		});
 
 		// Call ended
 		this.on("hangup", (callInfo) => {
-			console.log("Call ended:", callInfo);
+			console.log("Call hangup event:", callInfo);
 			this.currentCall = null;
+			this.setCallState('ended', callInfo);
 			this.onCallEnded(callInfo);
 		});
 
@@ -474,14 +629,9 @@ pbx_integration.WebRTC = class WebRTC {
 		});
 	}
 
-	/**
-	 * Make an outgoing call
-	 */
 	async call(phoneNumber) {
-		// Check both initialized flag AND phone object existence
-		// After a call ends, the SDK may be destroyed and need re-initialization
 		if (!this.initialized || !this.phone) {
-			console.log("WebRTC needs initialization, phone:", this.phone, "initialized:", this.initialized);
+			console.log("WebRTC needs initialization");
 			const ready = await this.init();
 			if (!ready) {
 				console.error("WebRTC re-initialization failed");
@@ -514,16 +664,16 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 	}
 
-	/**
-	 * Answer incoming call
-	 */
 	async answer() {
-		if (!this.phone || !this.currentCall) {
+		if (!this.phone) {
+			console.error("Phone not available for answer");
 			return false;
 		}
 
 		try {
+			console.log("Answering call...");
 			await this.phone.answer();
+			// State will change via 'connected' event
 			return true;
 		} catch (error) {
 			console.error("Answer failed:", error);
@@ -531,9 +681,6 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 	}
 
-	/**
-	 * Hang up current call
-	 */
 	async hangup() {
 		if (!this.phone) {
 			return false;
@@ -548,27 +695,18 @@ pbx_integration.WebRTC = class WebRTC {
 		}
 	}
 
-	/**
-	 * Toggle mute
-	 */
 	toggleMute() {
 		if (this.phone && this.phone.mute) {
 			this.phone.mute();
 		}
 	}
 
-	/**
-	 * Toggle hold
-	 */
 	toggleHold() {
 		if (this.phone && this.phone.hold) {
 			this.phone.hold();
 		}
 	}
 
-	/**
-	 * Send DTMF tone
-	 */
 	sendDTMF(digit) {
 		if (this.phone && this.phone.dtmf) {
 			this.phone.dtmf(digit);
@@ -578,16 +716,17 @@ pbx_integration.WebRTC = class WebRTC {
 	// ============ Event Handlers ============
 
 	onIncomingCall(callInfo) {
-		// Show native browser notification if permitted
+		// Browser notification
 		if (Notification.permission === "granted") {
 			new Notification("Incoming Call", {
-				body: callInfo.callerNumber || "Unknown",
+				body: callInfo?.callerNumber || callInfo?.number || "Unknown",
 				icon: "/assets/pbx_integration/images/phone-icon.png",
 				requireInteraction: true
 			});
 		}
 
-		// Trigger Frappe event for other components
+		// Play ringtone or sound here if needed
+
 		frappe.publish("pbx_webrtc_incoming", callInfo);
 	}
 
@@ -601,20 +740,20 @@ pbx_integration.WebRTC = class WebRTC {
 
 	onDisconnected() {
 		console.log("WebRTC disconnected - resetting state");
-		// Reset all state so next call triggers full re-initialization
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;
 		this.destroy = null;
 		this.on = null;
 		this.currentCall = null;
+		this.setCallState('idle');
 
-		// Remove stale wrapper and container
 		if (this.wrapper) {
 			this.wrapper.remove();
 			this.wrapper = null;
 		}
 		this.container = null;
+		this.incomingCallUI = null;
 
 		frappe.show_alert({
 			message: "WebRTC disconnected. Will reconnect on next call.",
@@ -622,11 +761,10 @@ pbx_integration.WebRTC = class WebRTC {
 		}, 5);
 	}
 
-	/**
-	 * Cleanup and disconnect
-	 */
 	disconnect() {
 		console.log("Disconnecting WebRTC SDK...");
+		this.stopCallTimer();
+
 		if (this.destroy) {
 			try {
 				this.destroy();
@@ -639,12 +777,14 @@ pbx_integration.WebRTC = class WebRTC {
 			this.wrapper = null;
 		}
 		this.container = null;
+		this.incomingCallUI = null;
 		this.initialized = false;
 		this.phone = null;
 		this.pbx = null;
 		this.destroy = null;
 		this.on = null;
 		this.currentCall = null;
+		this.callState = 'idle';
 	}
 };
 

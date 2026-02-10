@@ -305,3 +305,216 @@
     background: var(--pbx-bg-secondary);
     color: var(--pbx-text-muted);
 }
+
+/* ============================================
+   Custom Incoming Call UI
+   ============================================ */
+
+.pbx-incoming-call-ui {
+    display: none;
+    padding: 20px;
+    background: linear-gradient(180deg, var(--pbx-bg) 0%, var(--pbx-bg-secondary) 100%);
+    border-radius: 0 0 var(--pbx-radius) var(--pbx-radius);
+    text-align: center;
+    animation: pbx-fade-in 0.3s ease;
+}
+
+.pbx-incoming-call-ui.visible {
+    display: block;
+}
+
+@keyframes pbx-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pbx-incoming-caller {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.pbx-caller-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--pbx-primary) 0%, var(--pbx-primary-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 28px;
+    font-weight: 600;
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+    animation: pbx-avatar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes pbx-avatar-pulse {
+    0%, 100% {
+        box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 12px 30px rgba(99, 102, 241, 0.5);
+        transform: scale(1.05);
+    }
+}
+
+.pbx-caller-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pbx-caller-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--pbx-text);
+}
+
+.pbx-caller-number {
+    font-size: 14px;
+    color: var(--pbx-text-muted);
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+.pbx-incoming-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--pbx-success);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.pbx-incoming-label::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--pbx-success);
+    border-radius: 50%;
+    animation: pbx-blink 1s infinite;
+}
+
+@keyframes pbx-blink {
+    0%, 50% {
+        opacity: 1;
+    }
+    51%, 100% {
+        opacity: 0.3;
+    }
+}
+
+.pbx-incoming-actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+}
+
+.pbx-incoming-actions button {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    color: white;
+}
+
+.pbx-incoming-actions button svg {
+    width: 24px;
+    height: 24px;
+}
+
+.pbx-btn-answer {
+    background: linear-gradient(135deg, var(--pbx-success) 0%, var(--pbx-success-dark) 100%);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+}
+
+.pbx-btn-answer:hover {
+    transform: scale(1.1);
+    box-shadow: 0 12px 25px rgba(16, 185, 129, 0.5);
+}
+
+.pbx-btn-answer:active {
+    transform: scale(0.95);
+}
+
+.pbx-btn-reject {
+    background: linear-gradient(135deg, var(--pbx-danger) 0%, var(--pbx-danger-dark) 100%);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
+}
+
+.pbx-btn-reject:hover {
+    transform: scale(1.1);
+    box-shadow: 0 12px 25px rgba(239, 68, 68, 0.5);
+}
+
+.pbx-btn-reject:active {
+    transform: scale(0.95);
+}
+
+/* ============================================
+   Active Call UI
+   ============================================ */
+
+.pbx-active-call-ui {
+    display: none;
+    padding: 16px;
+    background: var(--pbx-bg-secondary);
+    border-radius: 0 0 var(--pbx-radius) var(--pbx-radius);
+}
+
+.pbx-active-call-ui.visible {
+    display: block;
+}
+
+.pbx-call-timer {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--pbx-text);
+    font-family: 'SF Mono', Monaco, monospace;
+    padding: 8px;
+    background: var(--pbx-bg);
+    border-radius: var(--pbx-radius-sm);
+    margin-bottom: 12px;
+}
+
+/* ============================================
+   Call State Transitions
+   ============================================ */
+
+.pbx-webrtc-wrapper[data-state="incoming"] .pbx-webrtc-sdk-container {
+    display: none;
+}
+
+.pbx-webrtc-wrapper[data-state="incoming"] .pbx-incoming-call-ui {
+    display: block;
+}
+
+.pbx-webrtc-wrapper[data-state="active"] .pbx-incoming-call-ui {
+    display: none;
+}
+
+.pbx-webrtc-wrapper[data-state="idle"] .pbx-incoming-call-ui,
+.pbx-webrtc-wrapper[data-state="ended"] .pbx-incoming-call-ui {
+    display: none;
+}
