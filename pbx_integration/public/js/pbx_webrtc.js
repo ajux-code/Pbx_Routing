@@ -16,6 +16,8 @@ pbx_integration.WebRTC = class WebRTC {
 		this.phone = null;
 		this.pbx = null;
 		this.currentCall = null;
+		this.currentSession = null;  // SDK session object
+		this.currentCallId = null;   // SDK call ID for answer/hangup
 		this.wrapper = null;
 		this.container = null;
 		this.destroy = null;
@@ -721,33 +723,56 @@ pbx_integration.WebRTC = class WebRTC {
 		console.log("Attaching listeners to phone object directly");
 
 		// newRTCSession is the primary event for new calls
-		this.phone.on('newRTCSession', (session) => {
-			console.log("[phone.on] newRTCSession:", session);
+		// Event data is {callId: string, session: object}
+		this.phone.on('newRTCSession', (data) => {
+			console.log("[phone.on] newRTCSession:", data);
 
-			if (session) {
-				const direction = session.direction || session._direction;
+			if (data) {
+				// Extract callId and session from event data
+				const callId = data.callId || data.call_id;
+				const session = data.session || data;
+
+				console.log("Call ID:", callId);
+				console.log("Session object:", session);
+				console.log("Session keys:", session ? Object.keys(session) : 'none');
+
+				// Store for answer/hangup
+				this.currentCallId = callId;
+				this.currentSession = session;
+
+				// Check direction - might be on session or data
+				const direction = session?.direction || session?._direction ||
+					data?.direction || data?._direction;
 				console.log("Session direction:", direction);
 
-				if (direction === 'incoming') {
+				// For incoming calls, show our UI
+				// Since direction might be undefined, check if we're idle and got a session
+				if (direction === 'incoming' || (this.callState === 'idle' && callId)) {
 					const callInfo = {
-						callerName: session.remote_identity?.display_name ||
-							session.remoteIdentity?.displayName ||
-							session._remote_identity?.display_name ||
+						callerName: session?.remote_identity?.display_name ||
+							session?.remoteIdentity?.displayName ||
+							session?._remote_identity?.display_name ||
 							'Unknown',
-						callerNumber: session.remote_identity?.uri?.user ||
-							session.remoteIdentity?.uri?.user ||
-							session._remote_identity?.uri?.user ||
-							session.request?.from?.uri?.user ||
+						callerNumber: session?.remote_identity?.uri?.user ||
+							session?.remoteIdentity?.uri?.user ||
+							session?._remote_identity?.uri?.user ||
+							session?.request?.from?.uri?.user ||
 							'',
+						callId: callId,
 						session: session
 					};
 
-					this.currentCall = session;
-					this.setCallState('incoming', callInfo);
-					this.onIncomingCall(callInfo);
+					console.log("Incoming call detected, callInfo:", callInfo);
 
-					// Also listen to session events
-					if (typeof session.on === 'function') {
+					this.currentCall = data;
+					// Only set incoming if we're idle (avoid double-triggering)
+					if (this.callState === 'idle') {
+						this.setCallState('incoming', callInfo);
+						this.onIncomingCall(callInfo);
+					}
+
+					// Also listen to session events if available
+					if (session && typeof session.on === 'function') {
 						session.on('accepted', () => {
 							console.log("[session.on] accepted");
 							this.setCallState('active');
@@ -756,14 +781,18 @@ pbx_integration.WebRTC = class WebRTC {
 							console.log("[session.on] confirmed");
 							this.setCallState('active');
 						});
-						session.on('ended', (data) => {
-							console.log("[session.on] ended:", data);
+						session.on('ended', (endData) => {
+							console.log("[session.on] ended:", endData);
 							this.currentCall = null;
+							this.currentSession = null;
+							this.currentCallId = null;
 							this.setCallState('ended');
 						});
-						session.on('failed', (data) => {
-							console.log("[session.on] failed:", data);
+						session.on('failed', (failData) => {
+							console.log("[session.on] failed:", failData);
 							this.currentCall = null;
+							this.currentSession = null;
+							this.currentCallId = null;
 							this.setCallState('ended');
 						});
 					}
@@ -874,34 +903,105 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	async answer() {
-		if (!this.phone) {
-			console.error("Phone not available for answer");
-			return false;
+		console.log("Answering call...");
+		console.log("Current callId:", this.currentCallId);
+		console.log("Current session:", this.currentSession);
+
+		// Try multiple approaches to answer the call
+
+		// Approach 1: Use session.answer() if available
+		if (this.currentSession && typeof this.currentSession.answer === 'function') {
+			try {
+				console.log("Trying session.answer()");
+				await this.currentSession.answer();
+				this.setCallState('active');
+				return true;
+			} catch (error) {
+				console.error("session.answer() failed:", error);
+			}
 		}
 
-		try {
-			console.log("Answering call...");
-			await this.phone.answer();
-			// State will change via 'connected' event
-			return true;
-		} catch (error) {
-			console.error("Answer failed:", error);
-			return false;
+		// Approach 2: Use phone.answer(callId) if we have callId
+		if (this.phone && this.currentCallId) {
+			try {
+				console.log("Trying phone.answer(callId):", this.currentCallId);
+				await this.phone.answer(this.currentCallId);
+				this.setCallState('active');
+				return true;
+			} catch (error) {
+				console.error("phone.answer(callId) failed:", error);
+			}
 		}
+
+		// Approach 3: Use phone.answer() without args
+		if (this.phone) {
+			try {
+				console.log("Trying phone.answer() without args");
+				await this.phone.answer();
+				this.setCallState('active');
+				return true;
+			} catch (error) {
+				console.error("phone.answer() failed:", error);
+			}
+		}
+
+		console.error("All answer approaches failed");
+		return false;
 	}
 
 	async hangup() {
-		if (!this.phone) {
-			return false;
+		console.log("Hanging up...");
+		console.log("Current callId:", this.currentCallId);
+		console.log("Current session:", this.currentSession);
+
+		// Try multiple approaches to hangup
+
+		// Approach 1: Use session.terminate() if available
+		if (this.currentSession && typeof this.currentSession.terminate === 'function') {
+			try {
+				console.log("Trying session.terminate()");
+				this.currentSession.terminate();
+				return true;
+			} catch (error) {
+				console.error("session.terminate() failed:", error);
+			}
 		}
 
-		try {
-			await this.phone.hangup();
-			return true;
-		} catch (error) {
-			console.error("Hangup failed:", error);
-			return false;
+		// Approach 2: Use session.hangup() if available
+		if (this.currentSession && typeof this.currentSession.hangup === 'function') {
+			try {
+				console.log("Trying session.hangup()");
+				await this.currentSession.hangup();
+				return true;
+			} catch (error) {
+				console.error("session.hangup() failed:", error);
+			}
 		}
+
+		// Approach 3: Use phone.hangup(callId) if we have callId
+		if (this.phone && this.currentCallId) {
+			try {
+				console.log("Trying phone.hangup(callId):", this.currentCallId);
+				await this.phone.hangup(this.currentCallId);
+				return true;
+			} catch (error) {
+				console.error("phone.hangup(callId) failed:", error);
+			}
+		}
+
+		// Approach 4: Use phone.hangup() without args
+		if (this.phone) {
+			try {
+				console.log("Trying phone.hangup() without args");
+				await this.phone.hangup();
+				return true;
+			} catch (error) {
+				console.error("phone.hangup() failed:", error);
+			}
+		}
+
+		console.error("All hangup approaches failed");
+		return false;
 	}
 
 	toggleMute() {
