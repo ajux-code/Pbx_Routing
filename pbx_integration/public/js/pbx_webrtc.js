@@ -1556,3 +1556,150 @@ pbx_integration.WebRTC = class WebRTC {
 
 // Create global instance
 pbx_integration.webrtc = new pbx_integration.WebRTC();
+
+// Debug helper - call from console: pbx_integration.debug()
+pbx_integration.debug = function() {
+	const w = pbx_integration.webrtc;
+	console.log("=== PBX WebRTC Debug Info ===");
+	console.log("Initialized:", w.initialized);
+	console.log("Call State:", w.callState);
+	console.log("Current Call ID:", w.currentCallId);
+	console.log("Current Session:", w.currentSession);
+	console.log("Current Call:", w.currentCall);
+	console.log("Phone object:", w.phone);
+
+	if (w.phone) {
+		console.log("\n=== Phone Object Properties ===");
+		console.log("Phone keys:", Object.keys(w.phone));
+
+		// Check for calls/sessions
+		const propsToCheck = [
+			'_calls', 'calls', '_sessions', 'sessions',
+			'currentCall', 'activeCall', 'ringingCall',
+			'currentSession', 'activeSession'
+		];
+
+		propsToCheck.forEach(prop => {
+			if (w.phone[prop] !== undefined) {
+				console.log(`phone.${prop}:`, w.phone[prop]);
+			}
+		});
+
+		// Try to call methods that might return call info
+		const methodsToTry = [
+			'getCurrentCalls', 'getActiveCalls', 'getRingingCalls',
+			'getSessions', 'getCalls', 'getCallList'
+		];
+
+		console.log("\n=== Phone Methods Results ===");
+		methodsToTry.forEach(method => {
+			if (typeof w.phone[method] === 'function') {
+				try {
+					const result = w.phone[method]();
+					console.log(`phone.${method}():`, result);
+				} catch (e) {
+					console.log(`phone.${method}(): ERROR -`, e.message);
+				}
+			}
+		});
+	}
+
+	if (w.currentSession) {
+		console.log("\n=== Current Session Details ===");
+		console.log("Session keys:", Object.keys(w.currentSession));
+		console.log("Session._session:", w.currentSession._session);
+		console.log("Session.status:", w.currentSession.status);
+		console.log("Session.direction:", w.currentSession.direction);
+
+		// Check session methods
+		const sessionMethods = ['terminate', 'hangup', 'bye', 'end', 'close'];
+		sessionMethods.forEach(method => {
+			console.log(`session.${method}:`, typeof w.currentSession[method]);
+		});
+	}
+
+	console.log("\n=== DOM Elements ===");
+	console.log("Wrapper:", w.wrapper);
+	console.log("Container:", w.container);
+	console.log("Container display:", w.container?.style?.display);
+
+	// Look for SDK elements in DOM
+	console.log("\n=== SDK DOM Elements ===");
+	const sdkElements = document.querySelectorAll('[class*="ys-webrtc"]');
+	console.log("SDK elements found:", sdkElements.length);
+	sdkElements.forEach((el, i) => {
+		console.log(`  ${i}: ${el.className}`, el);
+	});
+
+	// Look for any hangup/end buttons
+	console.log("\n=== Potential Hangup Buttons ===");
+	const hangupSelectors = [
+		'button[title*="hang" i]', 'button[title*="end" i]',
+		'[class*="hangup"]', '[class*="end-call"]',
+		'button.hangup', 'button.end'
+	];
+	hangupSelectors.forEach(sel => {
+		const btns = document.querySelectorAll(sel);
+		if (btns.length > 0) {
+			console.log(`"${sel}":`, btns);
+		}
+	});
+
+	console.log("\n=== End Debug ===");
+	return { phone: w.phone, session: w.currentSession, callId: w.currentCallId };
+};
+
+// Quick hangup debug - call: pbx_integration.tryHangup()
+pbx_integration.tryHangup = async function() {
+	const w = pbx_integration.webrtc;
+	console.log("=== Manual Hangup Attempt ===");
+
+	// First run debug
+	pbx_integration.debug();
+
+	// Try each approach individually with detailed logging
+	if (w.phone) {
+		console.log("\nTrying phone.hangup()...");
+		try {
+			const result = await w.phone.hangup();
+			console.log("phone.hangup() result:", result);
+		} catch (e) {
+			console.log("phone.hangup() error:", e);
+		}
+
+		if (w.currentCallId) {
+			console.log("\nTrying phone.hangup(callId)...");
+			try {
+				const result = await w.phone.hangup(w.currentCallId);
+				console.log("phone.hangup(callId) result:", result);
+			} catch (e) {
+				console.log("phone.hangup(callId) error:", e);
+			}
+		}
+	}
+
+	if (w.currentSession) {
+		console.log("\nSession object:", w.currentSession);
+		console.log("Session._session:", w.currentSession._session);
+
+		if (typeof w.currentSession.terminate === 'function') {
+			console.log("\nTrying session.terminate()...");
+			try {
+				w.currentSession.terminate();
+				console.log("session.terminate() called");
+			} catch (e) {
+				console.log("session.terminate() error:", e);
+			}
+		}
+
+		if (typeof w.currentSession.bye === 'function') {
+			console.log("\nTrying session.bye()...");
+			try {
+				w.currentSession.bye();
+				console.log("session.bye() called");
+			} catch (e) {
+				console.log("session.bye() error:", e);
+			}
+		}
+	}
+};
