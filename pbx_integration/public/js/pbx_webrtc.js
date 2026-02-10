@@ -305,8 +305,83 @@ pbx_integration.WebRTC = class WebRTC {
 
 		rejectBtn.addEventListener("click", async () => {
 			console.log("Reject button clicked");
-			await this.hangup();
+			await this.rejectCall();
 		});
+	}
+
+	/**
+	 * Reject an incoming call - uses SDK's reject/decline methods first
+	 */
+	async rejectCall() {
+		console.log("=== REJECT CALL ===");
+		console.log("Current callId:", this.currentCallId);
+		console.log("Current session:", this.currentSession);
+		console.log("Call state:", this.callState);
+
+		// Prevent multiple rapid clicks
+		if (this._rejectInProgress) {
+			console.log("Reject already in progress, ignoring");
+			return false;
+		}
+		this._rejectInProgress = true;
+
+		try {
+			// Refresh call info first
+			await this.refreshCurrentCall();
+
+			let success = false;
+
+			// Try SDK's reject method first (specific for incoming calls)
+			if (this.phone && this.currentCallId) {
+				const rejectMethods = ['reject', 'decline', 'hangup'];
+				for (const method of rejectMethods) {
+					if (typeof this.phone[method] === 'function') {
+						try {
+							console.log(`Trying phone.${method}(callId):`, this.currentCallId);
+							const result = await this.phone[method](this.currentCallId);
+							console.log(`phone.${method}(callId) result:`, result);
+							success = true;
+							break;
+						} catch (error) {
+							console.error(`phone.${method}(callId) failed:`, error);
+						}
+					}
+				}
+			}
+
+			// Try session methods
+			if (!success && this.currentSession) {
+				const sessionMethods = ['reject', 'decline', 'terminate', 'hangup'];
+				for (const method of sessionMethods) {
+					if (typeof this.currentSession[method] === 'function') {
+						try {
+							console.log(`Trying session.${method}()`);
+							this.currentSession[method]();
+							success = true;
+							break;
+						} catch (error) {
+							console.error(`session.${method}() failed:`, error);
+						}
+					}
+				}
+			}
+
+			// Fallback to generic hangup
+			if (!success) {
+				console.log("Reject-specific methods failed, falling back to hangup()");
+				return await this.hangup();
+			}
+
+			// Update state immediately
+			console.log("Reject API called, updating state to ended");
+			this.setCallState('ended');
+			return true;
+
+		} finally {
+			setTimeout(() => {
+				this._rejectInProgress = false;
+			}, 1000);
+		}
 	}
 
 	/**
@@ -513,29 +588,27 @@ pbx_integration.WebRTC = class WebRTC {
 	checkCallStillActive() {
 		if (!this.phone || this.callState !== 'active') return;
 
-		// Try to get current calls from SDK
-		const methodsToCheck = ['getCurrentCalls', 'getActiveCalls', 'getSessions', 'getCalls'];
+		// Only check using getSessions since it's the reliable method
+		if (typeof this.phone.getSessions === 'function') {
+			try {
+				const sessions = this.phone.getSessions();
+				// getSessions returns a Map
+				const sessionCount = sessions instanceof Map ? sessions.size :
+					(Array.isArray(sessions) ? sessions.length : Object.keys(sessions || {}).length);
 
-		for (const method of methodsToCheck) {
-			if (typeof this.phone[method] === 'function') {
-				try {
-					const result = this.phone[method]();
-					// If we get an empty result, call may have ended
-					if (result && typeof result === 'object') {
-						const hasActiveCalls = Array.isArray(result) ? result.length > 0 : Object.keys(result).length > 0;
-						if (!hasActiveCalls) {
-							console.log(`checkCallStillActive: No active calls found via ${method}, ending call`);
-							this.setCallState('ended');
-							return;
-						}
-					}
-				} catch (e) {
-					// Ignore errors
+				console.log("checkCallStillActive: Session count =", sessionCount);
+
+				if (sessionCount === 0) {
+					console.log("checkCallStillActive: No active sessions found, ending call");
+					this.setCallState('ended');
+					return;
 				}
+			} catch (e) {
+				console.log("checkCallStillActive error:", e);
 			}
 		}
 
-		// Also check if our session is still valid
+		// Also check if our session's status indicates it ended
 		if (this.currentSession) {
 			const status = this.currentSession.status || this.currentSession._status;
 			if (status === 'ended' || status === 'terminated' || status === 'failed') {
@@ -1069,15 +1142,34 @@ pbx_integration.WebRTC = class WebRTC {
 		this.tryGetSDKCall().then(sdkCall => {
 			if (sdkCall) {
 				console.log("Found SDK call via polling:", sdkCall);
+
+				// tryGetSDKCall now returns object/array (Maps are converted)
 				if (Array.isArray(sdkCall) && sdkCall.length > 0) {
 					const call = sdkCall[0];
 					this.currentCallId = call.callId || call.id;
 					this.currentSession = call.session || call;
-				} else if (typeof sdkCall === 'object') {
-					this.currentCallId = sdkCall.callId || sdkCall.id;
-					this.currentSession = sdkCall.session || sdkCall;
+				} else if (typeof sdkCall === 'object' && !Array.isArray(sdkCall)) {
+					// Object with callId as keys (from getSessions Map conversion)
+					const keys = Object.keys(sdkCall);
+					if (keys.length > 0) {
+						// If keys look like UUIDs, they're the callIds
+						const firstKey = keys[0];
+						const firstValue = sdkCall[firstKey];
+
+						// Check if the value has nested callId or if the key itself is the callId
+						if (firstValue && typeof firstValue === 'object') {
+							this.currentCallId = firstValue.callId || firstKey;
+							this.currentSession = firstValue.session || firstValue;
+						} else {
+							this.currentCallId = sdkCall.callId || sdkCall.id || firstKey;
+							this.currentSession = sdkCall.session || sdkCall;
+						}
+					} else {
+						this.currentCallId = sdkCall.callId || sdkCall.id;
+						this.currentSession = sdkCall.session || sdkCall;
+					}
 				}
-				console.log("SDK call info set - callId:", this.currentCallId);
+				console.log("SDK call info set via polling - callId:", this.currentCallId, "session:", !!this.currentSession);
 			} else {
 				// Try again after interval
 				setTimeout(() => {
@@ -1096,10 +1188,50 @@ pbx_integration.WebRTC = class WebRTC {
 
 		console.log("Refreshing current call info from SDK...");
 
-		// Try to get current/active calls from SDK
+		// PRIORITY: Try getSessions() first since it's the most reliable for Yeastar SDK
+		if (typeof this.phone.getSessions === 'function') {
+			try {
+				const sessions = this.phone.getSessions();
+				console.log("refreshCurrentCall getSessions():", sessions, "type:", sessions?.constructor?.name);
+
+				// Handle Map type (primary format from Yeastar SDK)
+				if (sessions instanceof Map && sessions.size > 0) {
+					const firstKey = sessions.keys().next().value;
+					if (firstKey) {
+						this.currentCallId = firstKey;
+						this.currentSession = sessions.get(firstKey);
+						console.log("refreshCurrentCall: Got callId from Map:", this.currentCallId);
+						return;
+					}
+				}
+				// Handle array type
+				else if (Array.isArray(sessions) && sessions.length > 0) {
+					const call = sessions[0];
+					if (call.callId) this.currentCallId = call.callId;
+					if (call.session) this.currentSession = call.session;
+					if (call.id) this.currentCallId = call.id;
+					console.log("refreshCurrentCall: Got callId from array:", this.currentCallId);
+					return;
+				}
+				// Handle plain object type
+				else if (sessions && typeof sessions === 'object' && !(sessions instanceof Map)) {
+					const keys = Object.keys(sessions);
+					if (keys.length > 0) {
+						this.currentCallId = keys[0];
+						this.currentSession = sessions[keys[0]];
+						console.log("refreshCurrentCall: Got callId from object:", this.currentCallId);
+						return;
+					}
+				}
+			} catch (e) {
+				console.log("refreshCurrentCall getSessions() error:", e);
+			}
+		}
+
+		// Try other methods as fallback
 		const methodsToTry = [
 			'getCurrentCall', 'getActiveCall', 'getCurrentSession',
-			'getCurrentCalls', 'getActiveCalls', 'getSessions'
+			'getCurrentCalls', 'getActiveCalls'
 		];
 
 		for (const method of methodsToTry) {
@@ -1165,9 +1297,33 @@ pbx_integration.WebRTC = class WebRTC {
 
 		console.log("Trying to find SDK call...");
 
-		// Try various methods to get current calls
+		// PRIORITY: Try getSessions() first since it's the most reliable for Yeastar SDK
+		if (typeof this.phone.getSessions === 'function') {
+			try {
+				const sessions = this.phone.getSessions();
+				console.log("tryGetSDKCall getSessions():", sessions, "type:", sessions?.constructor?.name);
+
+				// Handle Map type (primary format from Yeastar SDK)
+				if (sessions instanceof Map && sessions.size > 0) {
+					// Convert Map to object for consistent handling
+					const result = {};
+					sessions.forEach((value, key) => {
+						result[key] = value;
+					});
+					return result;
+				}
+				// Handle array or object
+				if (sessions && (Array.isArray(sessions) ? sessions.length > 0 : Object.keys(sessions).length > 0)) {
+					return sessions;
+				}
+			} catch (e) {
+				console.log("tryGetSDKCall getSessions() failed:", e.message);
+			}
+		}
+
+		// Try other methods
 		const methodsToTry = [
-			'getCurrentCalls', 'getRingingCalls', 'getSessions',
+			'getCurrentCalls', 'getRingingCalls',
 			'getCalls', 'getIncomingCalls', 'currentCalls', 'calls'
 		];
 
@@ -1176,6 +1332,16 @@ pbx_integration.WebRTC = class WebRTC {
 				try {
 					const result = this.phone[method]();
 					console.log(`phone.${method}() result:`, result);
+
+					// Handle Map type
+					if (result instanceof Map && result.size > 0) {
+						const obj = {};
+						result.forEach((value, key) => {
+							obj[key] = value;
+						});
+						return obj;
+					}
+
 					if (result && (Array.isArray(result) ? result.length > 0 : Object.keys(result).length > 0)) {
 						return result;
 					}
@@ -1306,7 +1472,11 @@ pbx_integration.WebRTC = class WebRTC {
 		console.log("Current callId:", this.currentCallId);
 		console.log("Current session:", this.currentSession);
 
-		// If we don't have SDK call info, try to find it
+		// Refresh call info first to make sure we have the latest
+		await this.refreshCurrentCall();
+		console.log("After refresh - callId:", this.currentCallId, "session:", this.currentSession);
+
+		// If we still don't have SDK call info, try to find it
 		if (!this.currentCallId && !this.currentSession) {
 			console.log("No SDK call info - trying to find it...");
 			const sdkCall = await this.tryGetSDKCall();
@@ -1324,54 +1494,70 @@ pbx_integration.WebRTC = class WebRTC {
 			}
 		}
 
+		let answerSuccess = false;
+
 		// Try multiple approaches to answer the call
 
-		// Approach 1: Use session.answer() if available
-		if (this.currentSession && typeof this.currentSession.answer === 'function') {
-			try {
-				console.log("Trying session.answer()");
-				await this.currentSession.answer();
-				this.setCallState('active');
-				return true;
-			} catch (error) {
-				console.error("session.answer() failed:", error);
-			}
-		}
-
-		// Approach 2: Use phone.answer(callId) if we have callId
+		// Approach 1: Use phone.answer(callId) if we have callId - this is most reliable
 		if (this.phone && this.currentCallId) {
 			try {
 				console.log("Trying phone.answer(callId):", this.currentCallId);
 				await this.phone.answer(this.currentCallId);
-				this.setCallState('active');
-				return true;
+				answerSuccess = true;
+				console.log("phone.answer(callId) succeeded");
 			} catch (error) {
 				console.error("phone.answer(callId) failed:", error);
 			}
 		}
 
+		// Approach 2: Use session.answer() if available
+		if (!answerSuccess && this.currentSession && typeof this.currentSession.answer === 'function') {
+			try {
+				console.log("Trying session.answer()");
+				await this.currentSession.answer();
+				answerSuccess = true;
+				console.log("session.answer() succeeded");
+			} catch (error) {
+				console.error("session.answer() failed:", error);
+			}
+		}
+
 		// Approach 3: Use phone.answer() without args
-		if (this.phone) {
+		if (!answerSuccess && this.phone) {
 			try {
 				console.log("Trying phone.answer() without args");
 				await this.phone.answer();
-				this.setCallState('active');
-				return true;
+				answerSuccess = true;
+				console.log("phone.answer() succeeded");
 			} catch (error) {
 				console.error("phone.answer() failed:", error);
 			}
 		}
 
 		// Approach 4: Try phone.accept() as alternative
-		if (this.phone && typeof this.phone.accept === 'function') {
+		if (!answerSuccess && this.phone && typeof this.phone.accept === 'function') {
 			try {
 				console.log("Trying phone.accept()");
 				await this.phone.accept(this.currentCallId);
-				this.setCallState('active');
-				return true;
+				answerSuccess = true;
+				console.log("phone.accept() succeeded");
 			} catch (error) {
 				console.error("phone.accept() failed:", error);
 			}
+		}
+
+		if (answerSuccess) {
+			this.setCallState('active');
+
+			// After answering, refresh call info to capture any updated session references
+			// The SDK may update the session after answer
+			setTimeout(async () => {
+				console.log("Post-answer: refreshing call info...");
+				await this.refreshCurrentCall();
+				console.log("Post-answer refresh - callId:", this.currentCallId, "session:", this.currentSession);
+			}, 500);
+
+			return true;
 		}
 
 		console.error("All answer approaches failed");
@@ -1383,177 +1569,203 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	async hangup() {
-		console.log("Hanging up...");
+		console.log("=== HANGUP CALLED ===");
 		console.log("Current callId:", this.currentCallId);
 		console.log("Current session:", this.currentSession);
 		console.log("Current call state:", this.callState);
+		console.log("Phone object exists:", !!this.phone);
+
+		// Prevent multiple rapid clicks
+		if (this._hangupInProgress) {
+			console.log("Hangup already in progress, ignoring");
+			return false;
+		}
+		this._hangupInProgress = true;
 
 		let success = false;
 
-		// First, try to get a fresh session/callId from the SDK
-		// The SDK might have updated the session reference after answer
-		await this.refreshCurrentCall();
-		console.log("After refresh - callId:", this.currentCallId, "session:", this.currentSession);
+		try {
+			// First, try to get a fresh session/callId from the SDK
+			// The SDK might have updated the session reference after answer
+			await this.refreshCurrentCall();
+			console.log("After refresh - callId:", this.currentCallId, "session:", this.currentSession);
 
-		// If still no callId, try to find any active call in the SDK
-		if (!this.currentCallId && this.phone) {
-			console.log("No callId found, searching for any active call...");
+			// If still no callId, try to find any active call in the SDK
+			if (!this.currentCallId && this.phone) {
+				console.log("No callId found after refresh, doing additional search...");
 
-			// Try getSessions which returns a Map
-			if (typeof this.phone.getSessions === 'function') {
-				try {
-					const sessions = this.phone.getSessions();
-					console.log("getSessions result:", sessions);
-					if (sessions && sessions.size > 0) {
-						// Get the first session's key (which is the callId)
-						const firstKey = sessions.keys().next().value;
-						if (firstKey) {
-							this.currentCallId = firstKey;
-							this.currentSession = sessions.get(firstKey);
-							console.log("Found callId from getSessions:", this.currentCallId);
+				// Try getSessions which returns a Map
+				if (typeof this.phone.getSessions === 'function') {
+					try {
+						const sessions = this.phone.getSessions();
+						console.log("hangup getSessions result:", sessions);
+						console.log("hangup getSessions type:", sessions?.constructor?.name);
+
+						// Handle Map type
+						if (sessions instanceof Map && sessions.size > 0) {
+							const firstKey = sessions.keys().next().value;
+							if (firstKey) {
+								this.currentCallId = firstKey;
+								this.currentSession = sessions.get(firstKey);
+								console.log("Found callId from getSessions Map:", this.currentCallId);
+							}
+						}
+						// Handle array type
+						else if (Array.isArray(sessions) && sessions.length > 0) {
+							const call = sessions[0];
+							this.currentCallId = call.callId || call.id;
+							this.currentSession = call.session || call;
+							console.log("Found callId from getSessions array:", this.currentCallId);
+						}
+						// Handle plain object type
+						else if (sessions && typeof sessions === 'object' && !(sessions instanceof Map)) {
+							const keys = Object.keys(sessions);
+							if (keys.length > 0) {
+								this.currentCallId = keys[0];
+								this.currentSession = sessions[keys[0]];
+								console.log("Found callId from getSessions object:", this.currentCallId);
+							}
+						}
+					} catch (e) {
+						console.log("getSessions error:", e);
+					}
+				}
+
+				// Also try checking phone._calls or phone.calls
+				if (!this.currentCallId) {
+					const callsObj = this.phone._calls || this.phone.calls;
+					if (callsObj && typeof callsObj === 'object') {
+						const callIds = Object.keys(callsObj);
+						if (callIds.length > 0) {
+							this.currentCallId = callIds[0];
+							this.currentSession = callsObj[callIds[0]];
+							console.log("Found callId from _calls:", this.currentCallId);
 						}
 					}
-				} catch (e) {
-					console.log("getSessions error:", e);
 				}
 			}
 
-			// Also try checking phone._calls or phone.calls
-			if (!this.currentCallId) {
-				const callsObj = this.phone._calls || this.phone.calls;
-				if (callsObj && typeof callsObj === 'object') {
-					const callIds = Object.keys(callsObj);
-					if (callIds.length > 0) {
-						this.currentCallId = callIds[0];
-						this.currentSession = callsObj[callIds[0]];
-						console.log("Found callId from _calls:", this.currentCallId);
+			console.log("Final callId for hangup:", this.currentCallId);
+			console.log("Final session for hangup:", this.currentSession);
+
+			// Try multiple approaches to hangup
+
+			// Approach 1: Use phone.hangup(callId) - THIS IS THE ONE THAT WORKS
+			if (this.phone && this.currentCallId && typeof this.phone.hangup === 'function') {
+				try {
+					console.log("Approach 1: Trying phone.hangup(callId):", this.currentCallId);
+					const result = await this.phone.hangup(this.currentCallId);
+					console.log("phone.hangup(callId) result:", result, "type:", typeof result);
+					// Accept true, undefined, or even false (SDK sometimes returns false but still hangs up)
+					success = true;
+					console.log("phone.hangup(callId) called - marking as success");
+				} catch (error) {
+					console.error("phone.hangup(callId) threw error:", error);
+				}
+			} else {
+				console.log("Skipping Approach 1 - phone:", !!this.phone, "callId:", this.currentCallId, "hangup fn:", typeof this.phone?.hangup);
+			}
+
+			// Approach 2: Use phone.hangup() without args
+			if (!success && this.phone && typeof this.phone.hangup === 'function') {
+				try {
+					console.log("Approach 2: Trying phone.hangup() without args");
+					const result = await this.phone.hangup();
+					console.log("phone.hangup() result:", result, "type:", typeof result);
+					success = true;
+					console.log("phone.hangup() called - marking as success");
+				} catch (error) {
+					console.error("phone.hangup() threw error:", error);
+				}
+			}
+
+			// Approach 3: Use session.terminate() if available
+			if (!success && this.currentSession && typeof this.currentSession.terminate === 'function') {
+				try {
+					console.log("Trying session.terminate()");
+					this.currentSession.terminate();
+					success = true;
+				} catch (error) {
+					console.error("session.terminate() failed:", error);
+				}
+			}
+
+			// Approach 4: Use session.hangup() if available
+			if (!success && this.currentSession && typeof this.currentSession.hangup === 'function') {
+				try {
+					console.log("Trying session.hangup()");
+					await this.currentSession.hangup();
+					success = true;
+				} catch (error) {
+					console.error("session.hangup() failed:", error);
+				}
+			}
+
+			// Approach 5: Try phone.endCall() or phone.reject()
+			if (!success && this.phone) {
+				const methodsToTry = ['endCall', 'end', 'reject', 'decline', 'cancel'];
+				for (const method of methodsToTry) {
+					if (typeof this.phone[method] === 'function') {
+						try {
+							console.log(`Trying phone.${method}()`);
+							await this.phone[method](this.currentCallId);
+							success = true;
+							break;
+						} catch (error) {
+							console.error(`phone.${method}() failed:`, error);
+						}
 					}
 				}
 			}
-		}
 
-		// Try multiple approaches to hangup
+			// Approach 6: Try to click SDK's own hangup button
+			if (!success) {
+				console.log("Trying to find and click SDK hangup button...");
+				const sdkHangupSelectors = [
+					'.ys-webrtc-sdk-ui button[title*="hangup" i]',
+					'.ys-webrtc-sdk-ui button[title*="end" i]',
+					'.ys-webrtc-sdk-ui .hangup-btn',
+					'.ys-webrtc-sdk-ui .end-call-btn',
+					'.ys-webrtc-sdk-ui [class*="hangup"]',
+					'.ys-webrtc-sdk-ui [class*="end-call"]',
+					'button.hangup', 'button.end-call',
+					'[data-action="hangup"]', '[data-action="end"]'
+				];
 
-		// Approach 1: Use phone.hangup(callId) - THIS IS THE ONE THAT WORKS
-		if (this.phone && this.currentCallId && typeof this.phone.hangup === 'function') {
-			try {
-				console.log("Trying phone.hangup(callId):", this.currentCallId);
-				const result = await this.phone.hangup(this.currentCallId);
-				console.log("phone.hangup(callId) result:", result);
-				if (result === true || result === undefined) {
-					success = true;
-					// Force state update since SDK may not emit event
-					setTimeout(() => this.setCallState('ended'), 100);
-				}
-			} catch (error) {
-				console.error("phone.hangup(callId) failed:", error);
-			}
-		}
-
-		// Approach 2: Use phone.hangup() without args (often fails, returns false)
-		if (!success && this.phone && typeof this.phone.hangup === 'function') {
-			try {
-				console.log("Trying phone.hangup() without args");
-				const result = await this.phone.hangup();
-				console.log("phone.hangup() result:", result);
-				// Only treat as success if it doesn't return false
-				if (result === true || result === undefined) {
-					success = true;
-					setTimeout(() => this.setCallState('ended'), 100);
-				}
-			} catch (error) {
-				console.error("phone.hangup() failed:", error);
-			}
-		}
-
-		// Approach 3: Use session.terminate() if available
-		if (!success && this.currentSession && typeof this.currentSession.terminate === 'function') {
-			try {
-				console.log("Trying session.terminate()");
-				this.currentSession.terminate();
-				success = true;
-			} catch (error) {
-				console.error("session.terminate() failed:", error);
-			}
-		}
-
-		// Approach 4: Use session.hangup() if available
-		if (!success && this.currentSession && typeof this.currentSession.hangup === 'function') {
-			try {
-				console.log("Trying session.hangup()");
-				await this.currentSession.hangup();
-				success = true;
-			} catch (error) {
-				console.error("session.hangup() failed:", error);
-			}
-		}
-
-		// Approach 5: Try phone.endCall() or phone.reject()
-		if (!success && this.phone) {
-			const methodsToTry = ['endCall', 'end', 'reject', 'decline', 'cancel'];
-			for (const method of methodsToTry) {
-				if (typeof this.phone[method] === 'function') {
-					try {
-						console.log(`Trying phone.${method}()`);
-						await this.phone[method](this.currentCallId);
+				for (const selector of sdkHangupSelectors) {
+					const btn = document.querySelector(selector);
+					if (btn) {
+						console.log("Found SDK hangup button:", selector);
+						btn.click();
 						success = true;
 						break;
-					} catch (error) {
-						console.error(`phone.${method}() failed:`, error);
 					}
 				}
 			}
-		}
 
-		// Approach 6: Try to click SDK's own hangup button
-		if (!success) {
-			console.log("Trying to find and click SDK hangup button...");
-			const sdkHangupSelectors = [
-				'.ys-webrtc-sdk-ui button[title*="hangup" i]',
-				'.ys-webrtc-sdk-ui button[title*="end" i]',
-				'.ys-webrtc-sdk-ui .hangup-btn',
-				'.ys-webrtc-sdk-ui .end-call-btn',
-				'.ys-webrtc-sdk-ui [class*="hangup"]',
-				'.ys-webrtc-sdk-ui [class*="end-call"]',
-				'button.hangup', 'button.end-call',
-				'[data-action="hangup"]', '[data-action="end"]'
-			];
-
-			for (const selector of sdkHangupSelectors) {
-				const btn = document.querySelector(selector);
-				if (btn) {
-					console.log("Found SDK hangup button:", selector);
-					btn.click();
-					success = true;
-					break;
-				}
+			// If any approach was attempted, immediately update state
+			// Don't wait for SDK callback - update UI right away for responsiveness
+			if (success) {
+				console.log("Hangup API called successfully, updating state to ended");
+				this.setCallState('ended');
+			} else {
+				// Approach 7: Force end state if all else fails
+				console.warn("All hangup approaches failed - forcing state to ended");
+				// Force the UI to ended state even if SDK call is stuck
+				this.setCallState('ended');
+				frappe.show_alert({
+					message: "Call ended (forced)",
+					indicator: "orange"
+				}, 3);
 			}
-		}
 
-		// Approach 7: Force end state if all else fails
-		if (!success) {
-			console.warn("All hangup approaches failed - forcing state to ended");
-			// Force the UI to ended state even if SDK call is stuck
-			this.setCallState('ended');
-			frappe.show_alert({
-				message: "Call ended (forced)",
-				indicator: "orange"
-			}, 3);
-			return true; // Return true since we're forcing the end
-		}
-
-		// If any approach succeeded, wait a moment then check state
-		if (success) {
-			// Give the SDK a moment to process, then ensure state is updated
+			return true;
+		} finally {
+			// Reset the flag after a short delay to allow for SDK processing
 			setTimeout(() => {
-				if (this.callState === 'active') {
-					console.log("SDK hangup succeeded, updating state to ended");
-					this.setCallState('ended');
-				}
-			}, 500);
+				this._hangupInProgress = false;
+			}, 1000);
 		}
-
-		return success;
 	}
 
 	toggleMute() {
@@ -1730,6 +1942,10 @@ pbx_integration.debug = function() {
 	console.log("Current Call ID:", w.currentCallId);
 	console.log("Current Session:", w.currentSession);
 	console.log("Current Call:", w.currentCall);
+	console.log("Hangup in progress:", w._hangupInProgress);
+	console.log("Reject in progress:", w._rejectInProgress);
+	console.log("Is Muted:", w.isMuted);
+	console.log("Is On Hold:", w.isOnHold);
 	console.log("Phone object:", w.phone);
 
 	if (w.phone) {
