@@ -310,7 +310,8 @@ pbx_integration.WebRTC = class WebRTC {
 	}
 
 	/**
-	 * Reject an incoming call - uses SDK's reject/decline methods first
+	 * Reject an incoming call - uses SDK's reject/decline methods
+	 * For SIP-based SDKs, rejecting unanswered calls requires specific handling
 	 */
 	async rejectCall() {
 		console.log("=== REJECT CALL ===");
@@ -328,11 +329,70 @@ pbx_integration.WebRTC = class WebRTC {
 		try {
 			// Refresh call info first
 			await this.refreshCurrentCall();
+			console.log("After refresh - callId:", this.currentCallId, "session:", this.currentSession);
+
+			// Log session details to understand its structure
+			if (this.currentSession) {
+				console.log("Session object keys:", Object.keys(this.currentSession));
+				console.log("Session status:", this.currentSession.status || this.currentSession._status);
+				console.log("Session direction:", this.currentSession.direction || this.currentSession._direction);
+				// Check for internal JsSIP session
+				if (this.currentSession._session) {
+					console.log("Found _session (JsSIP):", this.currentSession._session);
+					console.log("_session methods:", Object.keys(this.currentSession._session));
+				}
+			}
 
 			let success = false;
 
-			// Try SDK's reject method first (specific for incoming calls)
-			if (this.phone && this.currentCallId) {
+			// APPROACH 1: Try session.terminate() with SIP reject code (for JsSIP-based SDKs)
+			// This is the most reliable way to reject incoming calls
+			if (!success && this.currentSession) {
+				// Try terminate with status code for proper SIP rejection
+				if (typeof this.currentSession.terminate === 'function') {
+					try {
+						console.log("Trying session.terminate() with status code 486 (Busy)");
+						this.currentSession.terminate({
+							status_code: 486,
+							reason_phrase: 'Busy Here'
+						});
+						success = true;
+						console.log("session.terminate(486) called");
+					} catch (error) {
+						console.error("session.terminate(486) failed:", error);
+						// Try without options
+						try {
+							console.log("Trying session.terminate() without options");
+							this.currentSession.terminate();
+							success = true;
+							console.log("session.terminate() called");
+						} catch (e2) {
+							console.error("session.terminate() also failed:", e2);
+						}
+					}
+				}
+
+				// Try internal JsSIP session if available
+				if (!success && this.currentSession._session) {
+					const jsSipSession = this.currentSession._session;
+					if (typeof jsSipSession.terminate === 'function') {
+						try {
+							console.log("Trying _session.terminate() (JsSIP internal)");
+							jsSipSession.terminate({
+								status_code: 486,
+								reason_phrase: 'Busy Here'
+							});
+							success = true;
+							console.log("_session.terminate() called");
+						} catch (error) {
+							console.error("_session.terminate() failed:", error);
+						}
+					}
+				}
+			}
+
+			// APPROACH 2: Try phone.reject/decline/hangup with callId
+			if (!success && this.phone && this.currentCallId) {
 				const rejectMethods = ['reject', 'decline', 'hangup'];
 				for (const method of rejectMethods) {
 					if (typeof this.phone[method] === 'function') {
@@ -349,15 +409,16 @@ pbx_integration.WebRTC = class WebRTC {
 				}
 			}
 
-			// Try session methods
+			// APPROACH 3: Try session methods without status code
 			if (!success && this.currentSession) {
-				const sessionMethods = ['reject', 'decline', 'terminate', 'hangup'];
+				const sessionMethods = ['reject', 'decline', 'hangup', 'bye', 'cancel'];
 				for (const method of sessionMethods) {
 					if (typeof this.currentSession[method] === 'function') {
 						try {
 							console.log(`Trying session.${method}()`);
 							this.currentSession[method]();
 							success = true;
+							console.log(`session.${method}() succeeded`);
 							break;
 						} catch (error) {
 							console.error(`session.${method}() failed:`, error);
@@ -366,14 +427,51 @@ pbx_integration.WebRTC = class WebRTC {
 				}
 			}
 
-			// Fallback to generic hangup
-			if (!success) {
-				console.log("Reject-specific methods failed, falling back to hangup()");
-				return await this.hangup();
+			// APPROACH 4: Try phone methods without callId
+			if (!success && this.phone) {
+				const phoneMethods = ['reject', 'decline', 'hangup', 'cancel'];
+				for (const method of phoneMethods) {
+					if (typeof this.phone[method] === 'function') {
+						try {
+							console.log(`Trying phone.${method}() without callId`);
+							const result = await this.phone[method]();
+							console.log(`phone.${method}() result:`, result);
+							success = true;
+							break;
+						} catch (error) {
+							console.error(`phone.${method}() failed:`, error);
+						}
+					}
+				}
 			}
 
-			// Update state immediately
-			console.log("Reject API called, updating state to ended");
+			// APPROACH 5: Look for SDK's reject button and click it
+			if (!success) {
+				console.log("Trying to find and click SDK reject/decline button...");
+				const rejectSelectors = [
+					'.ys-webrtc-sdk-ui button[title*="reject" i]',
+					'.ys-webrtc-sdk-ui button[title*="decline" i]',
+					'.ys-webrtc-sdk-ui button[title*="cancel" i]',
+					'.ys-webrtc-sdk-ui [class*="reject"]',
+					'.ys-webrtc-sdk-ui [class*="decline"]',
+					'.ys-webrtc-sdk-ui [class*="cancel"]',
+					'[data-action="reject"]',
+					'[data-action="decline"]'
+				];
+
+				for (const selector of rejectSelectors) {
+					const btn = document.querySelector(selector);
+					if (btn) {
+						console.log("Found SDK reject button:", selector);
+						btn.click();
+						success = true;
+						break;
+					}
+				}
+			}
+
+			// Update state regardless of success (user wants to dismiss the UI)
+			console.log("Reject completed, success:", success, "- updating state to ended");
 			this.setCallState('ended');
 			return true;
 
