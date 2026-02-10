@@ -826,6 +826,18 @@ pbx_integration.WebRTC = class WebRTC {
 		if (!this.phone || typeof this.phone.on !== 'function') return;
 
 		console.log("Attaching listeners to phone object directly");
+		console.log("Phone object methods:", Object.keys(this.phone));
+
+		// Try to find method to get current/ringing calls
+		if (typeof this.phone.getCurrentCalls === 'function') {
+			console.log("phone.getCurrentCalls exists");
+		}
+		if (typeof this.phone.getRingingCalls === 'function') {
+			console.log("phone.getRingingCalls exists");
+		}
+		if (typeof this.phone.getSessions === 'function') {
+			console.log("phone.getSessions exists");
+		}
 
 		// newRTCSession is the primary event for new calls
 		// Event data is {callId: string, session: object}
@@ -904,12 +916,110 @@ pbx_integration.WebRTC = class WebRTC {
 			}
 		});
 
-		// Other phone events
-		['ringing', 'connecting', 'connected', 'disconnected'].forEach(evt => {
+		// Listen to many possible event names
+		const phoneEvents = [
+			'ringing', 'connecting', 'connected', 'disconnected',
+			'incoming', 'invite', 'call', 'session', 'incomingCall',
+			'incomingcall', 'ring', 'answer', 'answered', 'accept',
+			'startSession', 'newSession', 'registrationFailed', 'registered',
+			'unregistered', 'message', 'notify'
+		];
+
+		phoneEvents.forEach(evt => {
 			this.phone.on(evt, (data) => {
 				console.log(`[phone.on] ${evt}:`, data);
+
+				// If this looks like an incoming call event, try to extract call info
+				if (data && (evt === 'incoming' || evt === 'incomingCall' || evt === 'invite' || evt === 'ring' || evt === 'ringing')) {
+					const callId = data.callId || data.call_id || data.id;
+					const session = data.session || data;
+					if (callId || session) {
+						console.log("Potential incoming call from event:", evt);
+						this.currentCallId = callId;
+						this.currentSession = session;
+
+						if (this.callState === 'incoming' && !this.currentCallId) {
+							// We were waiting for the SDK call - now we have it
+							console.log("SDK call ID received after realtime notification");
+						}
+					}
+				}
 			});
 		});
+	}
+
+	/**
+	 * Poll for SDK call info after receiving realtime notification
+	 * The SDK might receive the SIP INVITE slightly after the PBX webhook fires
+	 */
+	pollForSDKCall(attempts, intervalMs) {
+		if (attempts <= 0 || this.currentCallId || this.currentSession) {
+			console.log("Stop polling - attempts:", attempts, "callId:", this.currentCallId, "session:", !!this.currentSession);
+			return;
+		}
+
+		console.log(`Polling for SDK call (${attempts} attempts left)...`);
+
+		this.tryGetSDKCall().then(sdkCall => {
+			if (sdkCall) {
+				console.log("Found SDK call via polling:", sdkCall);
+				if (Array.isArray(sdkCall) && sdkCall.length > 0) {
+					const call = sdkCall[0];
+					this.currentCallId = call.callId || call.id;
+					this.currentSession = call.session || call;
+				} else if (typeof sdkCall === 'object') {
+					this.currentCallId = sdkCall.callId || sdkCall.id;
+					this.currentSession = sdkCall.session || sdkCall;
+				}
+				console.log("SDK call info set - callId:", this.currentCallId);
+			} else {
+				// Try again after interval
+				setTimeout(() => {
+					this.pollForSDKCall(attempts - 1, intervalMs);
+				}, intervalMs);
+			}
+		});
+	}
+
+	/**
+	 * Try to find incoming call from SDK
+	 * Called when we get a realtime notification but SDK hasn't given us a session yet
+	 */
+	async tryGetSDKCall() {
+		if (!this.phone) return null;
+
+		console.log("Trying to find SDK call...");
+
+		// Try various methods to get current calls
+		const methodsToTry = [
+			'getCurrentCalls', 'getRingingCalls', 'getSessions',
+			'getCalls', 'getIncomingCalls', 'currentCalls', 'calls'
+		];
+
+		for (const method of methodsToTry) {
+			if (typeof this.phone[method] === 'function') {
+				try {
+					const result = this.phone[method]();
+					console.log(`phone.${method}() result:`, result);
+					if (result && (Array.isArray(result) ? result.length > 0 : Object.keys(result).length > 0)) {
+						return result;
+					}
+				} catch (e) {
+					console.log(`phone.${method}() failed:`, e.message);
+				}
+			}
+		}
+
+		// Also check if phone has properties with call info
+		const propsToCheck = ['currentCall', 'ringingCall', 'incomingCall', 'session', 'sessions'];
+		for (const prop of propsToCheck) {
+			if (this.phone[prop]) {
+				console.log(`phone.${prop}:`, this.phone[prop]);
+				return this.phone[prop];
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -934,6 +1044,10 @@ pbx_integration.WebRTC = class WebRTC {
 				this.currentCall = data;
 				this.setCallState('incoming', callInfo);
 				this.onIncomingCall(callInfo);
+
+				// Poll for SDK call info since there may be a delay
+				// The SDK might receive the SIP INVITE after the PBX webhook
+				this.pollForSDKCall(5, 500); // Try 5 times, 500ms apart
 			}
 		});
 
@@ -1017,6 +1131,24 @@ pbx_integration.WebRTC = class WebRTC {
 		console.log("Current callId:", this.currentCallId);
 		console.log("Current session:", this.currentSession);
 
+		// If we don't have SDK call info, try to find it
+		if (!this.currentCallId && !this.currentSession) {
+			console.log("No SDK call info - trying to find it...");
+			const sdkCall = await this.tryGetSDKCall();
+			if (sdkCall) {
+				console.log("Found SDK call:", sdkCall);
+				if (Array.isArray(sdkCall) && sdkCall.length > 0) {
+					const call = sdkCall[0];
+					this.currentCallId = call.callId || call.id;
+					this.currentSession = call.session || call;
+				} else if (typeof sdkCall === 'object') {
+					this.currentCallId = sdkCall.callId || sdkCall.id;
+					this.currentSession = sdkCall.session || sdkCall;
+				}
+				console.log("After SDK lookup - callId:", this.currentCallId, "session:", this.currentSession);
+			}
+		}
+
 		// Try multiple approaches to answer the call
 
 		// Approach 1: Use session.answer() if available
@@ -1055,7 +1187,23 @@ pbx_integration.WebRTC = class WebRTC {
 			}
 		}
 
+		// Approach 4: Try phone.accept() as alternative
+		if (this.phone && typeof this.phone.accept === 'function') {
+			try {
+				console.log("Trying phone.accept()");
+				await this.phone.accept(this.currentCallId);
+				this.setCallState('active');
+				return true;
+			} catch (error) {
+				console.error("phone.accept() failed:", error);
+			}
+		}
+
 		console.error("All answer approaches failed");
+		frappe.show_alert({
+			message: "Could not answer call - SDK call not found",
+			indicator: "red"
+		}, 5);
 		return false;
 	}
 
