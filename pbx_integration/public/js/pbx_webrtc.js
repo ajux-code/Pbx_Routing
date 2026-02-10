@@ -925,26 +925,33 @@ pbx_integration.WebRTC = class WebRTC {
 	// ============ Event Handlers ============
 
 	onIncomingCall(callInfo) {
+		console.log("onIncomingCall handler:", callInfo);
+
 		// Browser notification
 		if (Notification.permission === "granted") {
-			new Notification("Incoming Call", {
-				body: callInfo?.callerNumber || callInfo?.number || "Unknown",
-				icon: "/assets/pbx_integration/images/phone-icon.png",
-				requireInteraction: true
-			});
+			try {
+				new Notification("Incoming Call", {
+					body: callInfo?.callerNumber || callInfo?.number || "Unknown",
+					icon: "/assets/pbx_integration/images/phone-icon.png",
+					requireInteraction: true
+				});
+			} catch (e) {
+				console.warn("Could not show notification:", e);
+			}
 		}
 
-		// Play ringtone or sound here if needed
-
-		frappe.publish("pbx_webrtc_incoming", callInfo);
+		// Emit custom event for other parts of the app (use correct Frappe API)
+		$(document).trigger("pbx_webrtc_incoming", [callInfo]);
 	}
 
 	onCallConnected(callInfo) {
-		frappe.publish("pbx_webrtc_connected", callInfo);
+		console.log("onCallConnected handler:", callInfo);
+		$(document).trigger("pbx_webrtc_connected", [callInfo]);
 	}
 
 	onCallEnded(callInfo) {
-		frappe.publish("pbx_webrtc_ended", callInfo);
+		console.log("onCallEnded handler:", callInfo);
+		$(document).trigger("pbx_webrtc_ended", [callInfo]);
 	}
 
 	onDisconnected() {
