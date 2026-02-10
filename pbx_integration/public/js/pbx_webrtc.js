@@ -83,6 +83,7 @@ pbx_integration.WebRTC = class WebRTC {
 
 			this.initialized = true;
 			this.setupEventListeners();
+			this.setupRealtimeListeners();
 
 			frappe.show_alert({
 				message: "WebRTC Phone Ready",
@@ -544,10 +545,11 @@ pbx_integration.WebRTC = class WebRTC {
 				autoAnswer: false,
 				callWaiting: true,
 
-				// CRITICAL: Hide SDK's incoming call popup - we use our own
-				hiddenIncomingComponent: true,
+				// Let the SDK handle incoming component - we'll hide it with CSS
+				// Setting hiddenIncomingComponent: true may prevent events from firing
+				hiddenIncomingComponent: false,
 
-				// Hide dial panel too - we use the SDK's built-in one in container
+				// Show dial panel
 				hiddenDialPanelComponent: false,
 
 				// Session window positioning
@@ -565,6 +567,16 @@ pbx_integration.WebRTC = class WebRTC {
 			this.on = data.on;
 
 			console.log("Linkus SDK initialized with hiddenIncomingComponent: true");
+			console.log("SDK data keys:", Object.keys(data));
+			console.log("Phone object:", this.phone);
+			console.log("Phone methods:", this.phone ? Object.keys(this.phone) : 'none');
+
+			// Also try to listen on phone object directly if it has an 'on' method
+			if (this.phone && typeof this.phone.on === 'function') {
+				console.log("Setting up direct phone event listeners");
+				this.setupPhoneEventListeners();
+			}
+
 			return true;
 
 		} catch (error) {
@@ -575,26 +587,75 @@ pbx_integration.WebRTC = class WebRTC {
 
 	/**
 	 * Setup event listeners for call state management
+	 * Yeastar SDK events: newRTCSession, ringing, confirmed, ended, etc.
 	 */
 	setupEventListeners() {
 		if (!this.on) return;
 
-		// Incoming call - show our custom UI
+		// Log all events for debugging
+		const events = [
+			'incoming', 'newRTCSession', 'ringing', 'confirmed', 'connected',
+			'startSession', 'hangup', 'ended', 'terminated', 'failed',
+			'connectionStateChange', 'error'
+		];
+
+		events.forEach(eventName => {
+			this.on(eventName, (data) => {
+				console.log(`[WebRTC Event] ${eventName}:`, data);
+			});
+		});
+
+		// New RTC Session - this is the main event for incoming calls
+		this.on("newRTCSession", (session) => {
+			console.log("newRTCSession:", session);
+
+			// Check if this is an incoming call
+			if (session && (session.direction === 'incoming' || session._direction === 'incoming')) {
+				this.currentCall = session;
+				const callInfo = {
+					callerName: session.remote_identity?.display_name || session.remoteIdentity?.displayName || 'Unknown',
+					callerNumber: session.remote_identity?.uri?.user || session.remoteIdentity?.uri?.user || session.number || '',
+					session: session
+				};
+				this.setCallState('incoming', callInfo);
+				this.onIncomingCall(callInfo);
+			}
+		});
+
+		// Also try 'incoming' event (some SDK versions use this)
 		this.on("incoming", (callInfo) => {
-			console.log("Incoming call event:", callInfo);
-			this.currentCall = callInfo;
-			this.setCallState('incoming', callInfo);
-			this.onIncomingCall(callInfo);
+			console.log("incoming event:", callInfo);
+			if (this.callState !== 'incoming') {
+				this.currentCall = callInfo;
+				this.setCallState('incoming', callInfo);
+				this.onIncomingCall(callInfo);
+			}
+		});
+
+		// Ringing event - could also indicate incoming
+		this.on("ringing", (data) => {
+			console.log("ringing event:", data);
+			if (this.callState === 'idle' && data?.direction === 'incoming') {
+				this.currentCall = data;
+				this.setCallState('incoming', data);
+				this.onIncomingCall(data);
+			}
 		});
 
 		// Call connected/confirmed
+		this.on("confirmed", (callInfo) => {
+			console.log("Call confirmed event:", callInfo);
+			this.setCallState('active', callInfo);
+			this.onCallConnected(callInfo);
+		});
+
 		this.on("connected", (callInfo) => {
 			console.log("Call connected event:", callInfo);
 			this.setCallState('active', callInfo);
 			this.onCallConnected(callInfo);
 		});
 
-		// Also listen for startSession which fires when call starts
+		// Session start (for outbound calls)
 		this.on("startSession", (data) => {
 			console.log("startSession event:", data);
 			// For outbound calls, this marks the start
@@ -603,9 +664,30 @@ pbx_integration.WebRTC = class WebRTC {
 			}
 		});
 
-		// Call ended
+		// Call ended - try multiple event names
 		this.on("hangup", (callInfo) => {
 			console.log("Call hangup event:", callInfo);
+			this.currentCall = null;
+			this.setCallState('ended', callInfo);
+			this.onCallEnded(callInfo);
+		});
+
+		this.on("ended", (callInfo) => {
+			console.log("Call ended event:", callInfo);
+			this.currentCall = null;
+			this.setCallState('ended', callInfo);
+			this.onCallEnded(callInfo);
+		});
+
+		this.on("terminated", (callInfo) => {
+			console.log("Call terminated event:", callInfo);
+			this.currentCall = null;
+			this.setCallState('ended', callInfo);
+			this.onCallEnded(callInfo);
+		});
+
+		this.on("failed", (callInfo) => {
+			console.log("Call failed event:", callInfo);
 			this.currentCall = null;
 			this.setCallState('ended', callInfo);
 			this.onCallEnded(callInfo);
@@ -626,6 +708,133 @@ pbx_integration.WebRTC = class WebRTC {
 				message: `Call error: ${error.message || error}`,
 				indicator: "red"
 			}, 5);
+		});
+	}
+
+	/**
+	 * Setup event listeners directly on the phone object
+	 * The Yeastar SDK phone object may emit events directly
+	 */
+	setupPhoneEventListeners() {
+		if (!this.phone || typeof this.phone.on !== 'function') return;
+
+		console.log("Attaching listeners to phone object directly");
+
+		// newRTCSession is the primary event for new calls
+		this.phone.on('newRTCSession', (session) => {
+			console.log("[phone.on] newRTCSession:", session);
+
+			if (session) {
+				const direction = session.direction || session._direction;
+				console.log("Session direction:", direction);
+
+				if (direction === 'incoming') {
+					const callInfo = {
+						callerName: session.remote_identity?.display_name ||
+							session.remoteIdentity?.displayName ||
+							session._remote_identity?.display_name ||
+							'Unknown',
+						callerNumber: session.remote_identity?.uri?.user ||
+							session.remoteIdentity?.uri?.user ||
+							session._remote_identity?.uri?.user ||
+							session.request?.from?.uri?.user ||
+							'',
+						session: session
+					};
+
+					this.currentCall = session;
+					this.setCallState('incoming', callInfo);
+					this.onIncomingCall(callInfo);
+
+					// Also listen to session events
+					if (typeof session.on === 'function') {
+						session.on('accepted', () => {
+							console.log("[session.on] accepted");
+							this.setCallState('active');
+						});
+						session.on('confirmed', () => {
+							console.log("[session.on] confirmed");
+							this.setCallState('active');
+						});
+						session.on('ended', (data) => {
+							console.log("[session.on] ended:", data);
+							this.currentCall = null;
+							this.setCallState('ended');
+						});
+						session.on('failed', (data) => {
+							console.log("[session.on] failed:", data);
+							this.currentCall = null;
+							this.setCallState('ended');
+						});
+					}
+				}
+			}
+		});
+
+		// Other phone events
+		['ringing', 'connecting', 'connected', 'disconnected'].forEach(evt => {
+			this.phone.on(evt, (data) => {
+				console.log(`[phone.on] ${evt}:`, data);
+			});
+		});
+	}
+
+	/**
+	 * Setup Frappe realtime listeners for server-pushed call events
+	 * The server pushes incoming call notifications via websocket
+	 */
+	setupRealtimeListeners() {
+		console.log("Setting up Frappe realtime listeners for WebRTC");
+
+		// Listen for incoming call notification from server
+		frappe.realtime.on("pbx_incoming_call", (data) => {
+			console.log("[realtime] pbx_incoming_call:", data);
+
+			// Only show our UI if we're in idle state
+			if (this.callState === 'idle') {
+				const callInfo = {
+					callerName: data.caller_name || data.contact_name || 'Unknown',
+					callerNumber: data.caller_number || data.from_number || data.number || '',
+					callId: data.call_id
+				};
+
+				this.currentCall = data;
+				this.setCallState('incoming', callInfo);
+				this.onIncomingCall(callInfo);
+			}
+		});
+
+		// Also listen for show_call_popup (ERPNext standard)
+		frappe.realtime.on("show_call_popup", (data) => {
+			console.log("[realtime] show_call_popup:", data);
+
+			if (this.callState === 'idle' && this.initialized) {
+				const callInfo = {
+					callerName: data.contact || data.caller_name || 'Unknown',
+					callerNumber: data.from || data.phone || '',
+					callId: data.call_log
+				};
+
+				this.currentCall = data;
+				this.setCallState('incoming', callInfo);
+				this.onIncomingCall(callInfo);
+			}
+		});
+
+		// Listen for call answered/ended events
+		frappe.realtime.on("pbx_call_answered", (data) => {
+			console.log("[realtime] pbx_call_answered:", data);
+			if (this.callState === 'incoming') {
+				this.setCallState('active', data);
+			}
+		});
+
+		frappe.realtime.on("pbx_call_ended", (data) => {
+			console.log("[realtime] pbx_call_ended:", data);
+			if (this.callState !== 'idle') {
+				this.currentCall = null;
+				this.setCallState('ended', data);
+			}
 		});
 	}
 

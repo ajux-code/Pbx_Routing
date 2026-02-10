@@ -518,3 +518,29 @@
 .pbx-webrtc-wrapper[data-state="ended"] .pbx-incoming-call-ui {
     display: none;
 }
+
+/* ============================================
+   Hide SDK's External Incoming Call Popup
+   We use our own custom UI instead
+   ============================================ */
+
+/* Yeastar SDK incoming call popup - hide it */
+.ys-webrtc-sdk-ui-incoming-call,
+.ys-webrtc-incoming,
+.ys-incoming-call,
+.linkus-incoming-call,
+.ys-webrtc-sdk-ui__incoming,
+[class*="ys-webrtc"][class*="incoming"],
+[class*="linkus"][class*="incoming"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Also hide any SDK modal/popup that appears outside our container */
+body > .ys-webrtc-sdk-ui-modal,
+body > [class*="ys-webrtc"][class*="modal"],
+body > [class*="ys-webrtc"][class*="popup"] {
+    display: none !important;
+}
