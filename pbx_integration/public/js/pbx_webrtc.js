@@ -1318,25 +1318,35 @@ pbx_integration.WebRTC = class WebRTC {
 
 		// Try multiple approaches to hangup
 
-		// Approach 1: Use phone.hangup() without args first (SDK knows active call)
-		if (this.phone && typeof this.phone.hangup === 'function') {
+		// Approach 1: Use phone.hangup(callId) - THIS IS THE ONE THAT WORKS
+		if (this.phone && this.currentCallId && typeof this.phone.hangup === 'function') {
 			try {
-				console.log("Trying phone.hangup() without args");
-				await this.phone.hangup();
-				success = true;
+				console.log("Trying phone.hangup(callId):", this.currentCallId);
+				const result = await this.phone.hangup(this.currentCallId);
+				console.log("phone.hangup(callId) result:", result);
+				if (result === true || result === undefined) {
+					success = true;
+					// Force state update since SDK may not emit event
+					setTimeout(() => this.setCallState('ended'), 100);
+				}
 			} catch (error) {
-				console.error("phone.hangup() failed:", error);
+				console.error("phone.hangup(callId) failed:", error);
 			}
 		}
 
-		// Approach 2: Use phone.hangup(callId) if we have callId
-		if (!success && this.phone && this.currentCallId) {
+		// Approach 2: Use phone.hangup() without args (often fails, returns false)
+		if (!success && this.phone && typeof this.phone.hangup === 'function') {
 			try {
-				console.log("Trying phone.hangup(callId):", this.currentCallId);
-				await this.phone.hangup(this.currentCallId);
-				success = true;
+				console.log("Trying phone.hangup() without args");
+				const result = await this.phone.hangup();
+				console.log("phone.hangup() result:", result);
+				// Only treat as success if it doesn't return false
+				if (result === true || result === undefined) {
+					success = true;
+					setTimeout(() => this.setCallState('ended'), 100);
+				}
 			} catch (error) {
-				console.error("phone.hangup(callId) failed:", error);
+				console.error("phone.hangup() failed:", error);
 			}
 		}
 
