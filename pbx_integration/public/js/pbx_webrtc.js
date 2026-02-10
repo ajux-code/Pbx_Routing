@@ -354,6 +354,10 @@ pbx_integration.WebRTC = class WebRTC {
 				this.currentCallId = null;
 				if (headerText) headerText.textContent = "Phone";
 				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
+				// Show SDK container (dialer) when idle
+				if (this.container) {
+					this.container.style.display = "block";
+				}
 				break;
 
 			case 'incoming':
@@ -378,6 +382,10 @@ pbx_integration.WebRTC = class WebRTC {
 					this.wrapper.classList.add("active");
 					this.wrapper.classList.remove("incoming");
 				}
+				// Hide SDK container when showing our custom active call UI
+				if (this.container) {
+					this.container.style.display = "none";
+				}
 				break;
 
 			case 'ended':
@@ -390,6 +398,10 @@ pbx_integration.WebRTC = class WebRTC {
 				this.currentCallId = null;
 				if (headerText) headerText.textContent = "Call Ended";
 				if (this.wrapper) this.wrapper.classList.remove("incoming", "active");
+				// Show SDK container again
+				if (this.container) {
+					this.container.style.display = "block";
+				}
 				// Auto-return to idle after 2 seconds
 				setTimeout(() => {
 					if (this.callState === 'ended') {
@@ -1211,66 +1223,130 @@ pbx_integration.WebRTC = class WebRTC {
 		console.log("Hanging up...");
 		console.log("Current callId:", this.currentCallId);
 		console.log("Current session:", this.currentSession);
+		console.log("Current call state:", this.callState);
+
+		let success = false;
 
 		// Try multiple approaches to hangup
 
-		// Approach 1: Use session.terminate() if available
-		if (this.currentSession && typeof this.currentSession.terminate === 'function') {
-			try {
-				console.log("Trying session.terminate()");
-				this.currentSession.terminate();
-				return true;
-			} catch (error) {
-				console.error("session.terminate() failed:", error);
-			}
-		}
-
-		// Approach 2: Use session.hangup() if available
-		if (this.currentSession && typeof this.currentSession.hangup === 'function') {
-			try {
-				console.log("Trying session.hangup()");
-				await this.currentSession.hangup();
-				return true;
-			} catch (error) {
-				console.error("session.hangup() failed:", error);
-			}
-		}
-
-		// Approach 3: Use phone.hangup(callId) if we have callId
-		if (this.phone && this.currentCallId) {
-			try {
-				console.log("Trying phone.hangup(callId):", this.currentCallId);
-				await this.phone.hangup(this.currentCallId);
-				return true;
-			} catch (error) {
-				console.error("phone.hangup(callId) failed:", error);
-			}
-		}
-
-		// Approach 4: Use phone.hangup() without args
-		if (this.phone) {
+		// Approach 1: Use phone.hangup() without args first (SDK knows active call)
+		if (this.phone && typeof this.phone.hangup === 'function') {
 			try {
 				console.log("Trying phone.hangup() without args");
 				await this.phone.hangup();
-				return true;
+				success = true;
 			} catch (error) {
 				console.error("phone.hangup() failed:", error);
 			}
 		}
 
-		console.error("All hangup approaches failed");
-		return false;
+		// Approach 2: Use phone.hangup(callId) if we have callId
+		if (!success && this.phone && this.currentCallId) {
+			try {
+				console.log("Trying phone.hangup(callId):", this.currentCallId);
+				await this.phone.hangup(this.currentCallId);
+				success = true;
+			} catch (error) {
+				console.error("phone.hangup(callId) failed:", error);
+			}
+		}
+
+		// Approach 3: Use session.terminate() if available
+		if (!success && this.currentSession && typeof this.currentSession.terminate === 'function') {
+			try {
+				console.log("Trying session.terminate()");
+				this.currentSession.terminate();
+				success = true;
+			} catch (error) {
+				console.error("session.terminate() failed:", error);
+			}
+		}
+
+		// Approach 4: Use session.hangup() if available
+		if (!success && this.currentSession && typeof this.currentSession.hangup === 'function') {
+			try {
+				console.log("Trying session.hangup()");
+				await this.currentSession.hangup();
+				success = true;
+			} catch (error) {
+				console.error("session.hangup() failed:", error);
+			}
+		}
+
+		// Approach 5: Try phone.endCall() or phone.reject()
+		if (!success && this.phone) {
+			const methodsToTry = ['endCall', 'end', 'reject', 'decline', 'cancel'];
+			for (const method of methodsToTry) {
+				if (typeof this.phone[method] === 'function') {
+					try {
+						console.log(`Trying phone.${method}()`);
+						await this.phone[method](this.currentCallId);
+						success = true;
+						break;
+					} catch (error) {
+						console.error(`phone.${method}() failed:`, error);
+					}
+				}
+			}
+		}
+
+		// Approach 6: Force end state if all else fails
+		if (!success) {
+			console.warn("All hangup approaches failed - forcing state to ended");
+			// Force the UI to ended state even if SDK call is stuck
+			this.setCallState('ended');
+			frappe.show_alert({
+				message: "Call ended (forced)",
+				indicator: "orange"
+			}, 3);
+			return true; // Return true since we're forcing the end
+		}
+
+		// If any approach succeeded, wait a moment then check state
+		if (success) {
+			// Give the SDK a moment to process, then ensure state is updated
+			setTimeout(() => {
+				if (this.callState === 'active') {
+					console.log("SDK hangup succeeded, updating state to ended");
+					this.setCallState('ended');
+				}
+			}, 500);
+		}
+
+		return success;
 	}
 
 	toggleMute() {
-		if (this.phone && this.phone.mute) {
-			this.phone.mute();
+		if (!this.phone) return;
+
+		try {
+			// Try with callId first
+			if (this.currentCallId && typeof this.phone.mute === 'function') {
+				this.phone.mute(this.currentCallId);
+			} else if (typeof this.phone.mute === 'function') {
+				this.phone.mute();
+			} else if (this.currentSession && typeof this.currentSession.mute === 'function') {
+				this.currentSession.mute();
+			}
+		} catch (error) {
+			console.error("Mute failed:", error);
 		}
 	}
 
 	toggleHold() {
-		if (this.phone && this.phone.hold) {
-			this.phone.hold();
+		if (!this.phone) return;
+
+		try {
+			// Try with callId first
+			if (this.currentCallId && typeof this.phone.hold === 'function') {
+				this.phone.hold(this.currentCallId);
+			} else if (typeof this.phone.hold === 'function') {
+				this.phone.hold();
+			} else if (this.currentSession && typeof this.currentSession.hold === 'function') {
+				this.currentSession.hold();
+			}
+		} catch (error) {
+			console.error("Hold failed:", error);
 		}
 	}
 
